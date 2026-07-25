@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Playlist — CD Player</title>
+<style>
+  :root{
+    --page-bg:#f1f1f0;
+    --card-hi:#ececeb;
+    --card-lo:#d7d6d5;
+    --ink:#1c1c1e;
+    --ink-soft:#a5a5a7;
+    --card-size:420px;
+    --card-radius:104px;
+    --disc-size:444px;
+    --dy:0px;            /* 唱片滑動位移（hover / eject 時改變） */
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    background:var(--page-bg);
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "PingFang TC", sans-serif;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+
+  /* ── 播放器卡片 ─────────────────────────── */
+  .player{
+    position:relative;
+    width:var(--card-size);height:var(--card-size);
+    border-radius:var(--card-radius);
+    background:linear-gradient(180deg,var(--card-hi) 0%,var(--card-lo) 100%);
+    box-shadow:
+      0 30px 60px -18px rgba(0,0,0,.22),
+      0 10px 24px -10px rgba(0,0,0,.10),
+      inset 0 1px 0 rgba(255,255,255,.65);
+  }
+
+  /* 卡片內的裁切層：唱片超出卡片的部分被切掉（插槽效果） */
+  .clip{
+    position:absolute;inset:0;
+    border-radius:inherit;
+    overflow:hidden;
+  }
+
+  /* ── CD 唱片 ───────────────────────────── */
+  .disc{
+    position:absolute;left:50%;top:0;
+    width:var(--disc-size);height:var(--disc-size);
+    transform:translate(-50%,-50%) translateY(var(--dy));
+    transition:transform .65s cubic-bezier(.32,.72,.28,1);
+    will-change:transform;
+    filter:drop-shadow(0 14px 22px rgba(0,0,0,.28));
+  }
+  .disc-face{
+    width:100%;height:100%;border-radius:50%;
+    background:var(--art,#333);
+    background-size:cover;background-position:center;
+    animation:spin 9s linear infinite;
+    position:relative;
+    overflow:hidden;
+  }
+  .player.paused .disc-face{animation-play-state:paused;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* CD 光澤：跟著唱片一起轉 */
+  .disc-face::before{
+    content:"";position:absolute;inset:0;border-radius:50%;
+    background:conic-gradient(from 20deg,
+      rgba(255,255,255,0) 0deg, rgba(255,255,255,.20) 40deg, rgba(255,255,255,0) 90deg,
+      rgba(255,255,255,0) 170deg, rgba(255,255,255,.14) 215deg, rgba(255,255,255,0) 260deg);
+    mix-blend-mode:screen;
+  }
+  /* ── 插槽軸心（不被卡片裁切，露出卡片上緣） ── */
+  .hub{
+    position:absolute;left:50%;top:0;
+    width:96px;height:96px;border-radius:50%;
+    opacity:.85;
+    transform:translate(-50%,-50%) translateY(var(--dy));
+    transition:transform .65s cubic-bezier(.32,.72,.28,1),opacity .4s ease;
+    background:
+      radial-gradient(circle at 50% 42%,
+        rgba(255,255,255,.85) 0%, rgba(238,238,238,.9) 26%,
+        rgba(196,196,198,.95) 27%, rgba(214,214,215,.92) 44%,
+        rgba(178,178,181,.95) 45%, rgba(205,205,207,.55) 58%,
+        rgba(190,190,192,.35) 70%, rgba(180,180,182,0) 71%);
+    box-shadow:0 4px 12px rgba(0,0,0,.14);
+    pointer-events:none;
+  }
+  .hub::after{ /* 中心孔 */
+    content:"";position:absolute;left:50%;top:50%;
+    width:30px;height:30px;border-radius:50%;
+    transform:translate(-50%,-50%);
+    background:var(--page-bg);
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.25);
+  }
+
+  /* ── hover：CD 滑下展開成完整專輯封面 ────── */
+  .cover{
+    position:absolute;inset:0;border-radius:inherit;
+    background:var(--art,#333);
+    background-size:cover;background-position:center;
+    opacity:0;transform:scale(1.045);
+    transition:opacity .45s ease .18s, transform .6s cubic-bezier(.32,.72,.28,1) .1s;
+    display:flex;flex-direction:column;justify-content:flex-end;
+    padding:44px 48px;
+  }
+  .cover .a{color:#fff;font-size:24px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 2px 10px rgba(0,0,0,.45);}
+  .cover .t{color:rgba(255,255,255,.88);font-size:14px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.4);}
+
+  .player:hover{--dy:210px;}
+  .player:hover .disc{transform:translate(-50%,-50%) translateY(var(--dy)) scale(1.02);}
+  .player:hover .cover{opacity:1;transform:scale(1);}
+  .player:hover .hub{opacity:.25;}
+  .player:hover .info{opacity:0;transform:translateY(8px);}
+
+  /* ── 換片：CD 退出插槽 ──────────────────── */
+  .player.eject{--dy:-300px;}
+  .player.eject .hub{opacity:0;}
+  .player.eject .disc{filter:drop-shadow(0 4px 10px rgba(0,0,0,.15));}
+
+  /* ── 曲目資訊 ──────────────────────────── */
+  .info{
+    position:absolute;left:0;right:0;top:53%;
+    display:flex;flex-direction:column;align-items:center;gap:9px;
+    transition:opacity .3s ease,transform .3s ease;
+  }
+  .wave{display:flex;align-items:center;gap:3px;height:18px;}
+  .wave i{
+    width:3px;border-radius:2px;background:#8f8f92;
+    animation:bounce 1s ease-in-out infinite;
+  }
+  .wave i:nth-child(1){height:8px;animation-delay:0s;}
+  .wave i:nth-child(2){height:14px;animation-delay:.15s;}
+  .wave i:nth-child(3){height:18px;animation-delay:.3s;}
+  .wave i:nth-child(4){height:12px;animation-delay:.45s;}
+  .wave i:nth-child(5){height:7px;animation-delay:.6s;}
+  @keyframes bounce{0%,100%{transform:scaleY(.55);}50%{transform:scaleY(1);}}
+  .player.paused .wave i{animation-play-state:paused;transform:scaleY(.4);}
+
+  .artist{font-size:19px;font-weight:500;color:var(--ink-soft);letter-spacing:.01em;}
+  .title{font-size:23px;font-weight:700;color:var(--ink);letter-spacing:-.01em;margin-top:-3px;}
+
+  .bar{width:66px;height:4px;border-radius:2px;background:#c2c2c3;overflow:hidden;margin-top:2px;}
+  .bar b{display:block;height:100%;width:0%;background:#68686b;border-radius:2px;transition:width .25s linear;}
+
+  .time{font-size:19px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .time span{color:var(--ink-soft);font-weight:500;}
+
+  /* ── 頁面層級的測試控制列（Widget 版不會有） ── */
+  .controls{display:flex;align-items:center;gap:18px;}
+  .controls button{
+    width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;
+    background:#e6e6e5;color:#59595c;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 4px 12px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.7);
+    transition:transform .15s ease, background .15s ease;
+  }
+  .controls button:hover{background:#dedddc;transform:translateY(-1px);}
+  .controls button:active{transform:scale(.94);}
+  .controls svg{width:20px;height:20px;stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .controls .play svg{fill:currentColor;stroke:none;}
+  .hint{font-size:12.5px;color:#b3b3b5;letter-spacing:.02em;}
+
+  @media (prefers-reduced-motion: reduce){
+    .disc-face{animation:none;}
+    .wave i{animation:none;}
+  }
+</style>
+</head>
+<body>
+
+  <div class="player paused" id="player">
+    <div class="clip">
+      <div class="disc" id="disc">
+        <div class="disc-face" id="discFace"></div>
+      </div>
+      <div class="cover" id="cover">
+        <div class="a" id="coverArtist"></div>
+        <div class="t" id="coverTitle"></div>
+      </div>
+    </div>
+    <div class="hub"></div>
+    <div class="info">
+      <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="artist" id="artist"></div>
+      <div class="title" id="title"></div>
+      <div class="bar"><b id="barFill"></b></div>
+      <div class="time"><span id="cur">0:00</span> <span>/ <span id="dur">0:00</span></span></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="prev" aria-label="上一首"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <button id="toggle" class="play" aria-label="播放/暫停"><svg id="playIcon" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20"/></svg></button>
+    <button id="next" aria-label="下一首"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+  </div>
+  <div class="hint">hover 卡片看完整封面・Phase 0 假資料原型</div>
+
+<script>
+(() => {
+  // ── 假資料：三張虛構專輯（之後 Phase 1 換成 Music App 真資料） ──
+  const tracks = [
+    {
+      artist: "Neon Coast", title: "Midnight Drive", dur: 192,
+      art: `linear-gradient(160deg,#2b2f55 0%,#4a3d78 45%,#8a4d8f 78%,#d9788f 100%),
+            radial-gradient(circle at 72% 24%,rgba(255,170,190,.55) 0%,rgba(255,170,190,0) 42%)`
+    },
+    {
+      artist: "Paper Moon", title: "Slow Waves", dur: 167,
+      art: `linear-gradient(200deg,#f0e5d2 0%,#c9d8cf 40%,#5e8f8a 78%,#2f5a5c 100%),
+            radial-gradient(circle at 30% 78%,rgba(255,244,214,.6) 0%,rgba(255,244,214,0) 46%)`
+    },
+    {
+      artist: "Glass Garden", title: "Bloom", dur: 185,
+      art: `linear-gradient(150deg,#15241a 0%,#2e5230 45%,#6f9440 75%,#d8c94f 100%),
+            radial-gradient(circle at 68% 70%,rgba(230,255,150,.4) 0%,rgba(230,255,150,0) 40%)`
+    }
+  ];
+
+  const $ = id => document.getElementById(id);
+  const player = $("player");
+  let idx = 0, cur = 0, playing = false, timer = null, switching = false;
+
+  const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`;
+
+  function applyArt(t){
+    player.style.setProperty("--art", t.art.replace(/\n\s*/g,""));
+    $("discFace").style.background = t.art.replace(/\n\s*/g,"");
+    $("cover").style.background = t.art.replace(/\n\s*/g,"");
+    $("artist").textContent = t.artist;
+    $("title").textContent = t.title;
+    $("coverArtist").textContent = t.title;
+    $("coverTitle").textContent = t.artist;
+    $("dur").textContent = fmt(t.dur);
+  }
+
+  function render(){
+    $("cur").textContent = fmt(cur);
+    $("barFill").style.width = (cur / tracks[idx].dur * 100) + "%";
+  }
+
+  function tick(){
+    cur += 0.25;
+    if (cur >= tracks[idx].dur) { change(1); return; }
+    render();
+  }
+
+  function setPlaying(on){
+    playing = on;
+    player.classList.toggle("paused", !on);
+    clearInterval(timer);
+    if (on) timer = setInterval(tick, 250);
+    $("playIcon").innerHTML = on
+      ? '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>'
+      : '<polygon points="7 4 20 12 7 20"/>';
+  }
+
+  // 換片：退片 → 換內容 → 插回
+  function change(step){
+    if (switching) return;
+    switching = true;
+    clearInterval(timer);
+    player.classList.add("eject");
+    setTimeout(() => {
+      idx = (idx + step + tracks.length) % tracks.length;
+      cur = 0;
+      applyArt(tracks[idx]);
+      render();
+      player.classList.remove("eject");
+      setTimeout(() => {
+        switching = false;
+        if (playing) timer = setInterval(tick, 250);
+      }, 650);
+    }, 660);
+  }
+
+  $("toggle").addEventListener("click", () => setPlaying(!playing));
+  $("next").addEventListener("click", () => change(1));
+  $("prev").addEventListener("click", () => change(-1));
+  $("disc").addEventListener("click", () => setPlaying(!playing));
+
+  // 開場：從退片位置插入第一張 CD
+  // 不用 rAF（背景分頁會被瀏覽器凍結，開場就卡住），改用 setTimeout
+  applyArt(tracks[0]);
+  cur = 75; render();               // 模擬播到一半的畫面（對齊參考圖 1:15）
+  player.classList.add("eject");
+  void player.offsetWidth;          // 強制 reflow，確保退片起始狀態先生效
+  setTimeout(() => {
+    player.classList.remove("eject");
+    setTimeout(() => setPlaying(true), 700);
+  }, 80);
+})();
+</script>
+</body>
+</html>
