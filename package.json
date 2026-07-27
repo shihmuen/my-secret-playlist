@@ -1,0 +1,12 @@
+{
+  "name": "my-playlist",
+  "version": "0.1.0",
+  "description": "CD-slot music player widget for macOS (Apple Music via Music.app)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^43.2.0"
+  }
+}
