@@ -1,2 +1,5 @@
 node_modules/
 debug.log
+dist/
+build/icon.iconset/
+build/icon.svg.png

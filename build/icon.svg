@@ -1,0 +1,49 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EFEFEE"/>
+      <stop offset="1" stop-color="#D5D4D3"/>
+    </linearGradient>
+    <linearGradient id="disc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2B2F55"/>
+      <stop offset=".45" stop-color="#4A3D78"/>
+      <stop offset=".78" stop-color="#8A4D8F"/>
+      <stop offset="1" stop-color="#D9788F"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2=".3">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#FFFFFF" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="cardClip">
+      <rect x="100" y="100" width="824" height="824" rx="186"/>
+    </clipPath>
+  </defs>
+
+  <!-- 卡片本體 -->
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#card)"/>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="none" stroke="#FFFFFF" stroke-opacity=".55" stroke-width="3"/>
+
+  <!-- CD：從卡片頂端探出，被卡片外形裁切 -->
+  <g clip-path="url(#cardClip)">
+    <circle cx="512" cy="235" r="345" fill="url(#disc)"/>
+    <circle cx="512" cy="235" r="345" fill="url(#sheen)"/>
+  </g>
+
+  <!-- 插槽軸心（半透明同心圓環） -->
+  <g clip-path="url(#cardClip)">
+    <circle cx="512" cy="235" r="86" fill="#F2F2F1" fill-opacity=".45"/>
+    <circle cx="512" cy="235" r="60" fill="none" stroke="#BCBCBC" stroke-opacity=".65" stroke-width="10"/>
+    <circle cx="512" cy="235" r="24" fill="#EDEDEC" fill-opacity=".75"/>
+  </g>
+
+  <!-- 曲目資訊示意 -->
+  <g fill="#A5A5A7">
+    <rect x="422" y="668" width="180" height="30" rx="15"/>
+  </g>
+  <g fill="#3A3A3C">
+    <rect x="368" y="726" width="288" height="42" rx="21"/>
+  </g>
+  <rect x="458" y="808" width="108" height="14" rx="7" fill="#C2C2C3"/>
+  <rect x="458" y="808" width="46" height="14" rx="7" fill="#68686B"/>
+</svg>

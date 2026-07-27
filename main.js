@@ -40,12 +40,15 @@ tell application "Music"
 end tell`;
 }
 
-const LOG = path.join(__dirname, "debug.log");
+// log 與位置紀錄放 userData（打包成 .app 後 __dirname 是唯讀的）
+const userDir = () => app.getPath("userData");
+const LOG = () => path.join(userDir(), "debug.log");
+const POS_FILE = () => path.join(userDir(), "position.json");
 function osa(script) {
   return new Promise((resolve) => {
     execFile("osascript", ["-e", script], { timeout: 8000 }, (err, stdout, stderr) => {
       if (err) {
-        fs.appendFile(LOG, `[${new Date().toISOString()}] osascript error: ${(stderr || err.message).trim()}\n`, () => {});
+        fs.appendFile(LOG(), `[${new Date().toISOString()}] osascript error: ${(stderr || err.message).trim()}\n`, () => {});
       }
       resolve(err ? null : stdout.trim());
     });
@@ -95,10 +98,21 @@ ipcMain.on("control", (_e, cmd) => {
   if (COMMANDS[cmd]) osa(`tell application "Music" to ${COMMANDS[cmd]}`);
 });
 
+// ── 視窗位置記憶：拖到哪、下次開就在哪 ──
+function loadPosition() {
+  try {
+    const p = JSON.parse(fs.readFileSync(POS_FILE(), "utf8"));
+    if (Number.isFinite(p.x) && Number.isFinite(p.y)) return p;
+  } catch (e) {}
+  return null;
+}
+
 function createWindow() {
+  const saved = loadPosition();
   win = new BrowserWindow({
     width: 380,
     height: 420,
+    ...(saved ? { x: saved.x, y: saved.y } : {}),
     frame: false,
     transparent: true,
     hasShadow: false,
@@ -109,6 +123,10 @@ function createWindow() {
     },
   });
   win.loadFile("widget.html");
+  win.on("moved", () => {
+    const [x, y] = win.getPosition();
+    fs.writeFile(POS_FILE(), JSON.stringify({ x, y }), () => {});
+  });
   win.on("closed", () => (win = null));
 }
 
