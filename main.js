@@ -13,10 +13,10 @@ let lastId = null;
 // ── AppleScript：讀取正在播放的資訊（一行一個欄位） ──
 const NOW_SCRIPT = `
 tell application "Music"
-  set st to player state
-  if st is playing or st is paused then
+  set ps to player state
+  if ps is playing or ps is paused then
     set t to current track
-    return (st as text) & linefeed & (name of t) & linefeed & (artist of t) & linefeed & (player position as text) & linefeed & (duration of t as text) & linefeed & (persistent ID of t)
+    return (ps as text) & linefeed & (name of t) & linefeed & (artist of t) & linefeed & (player position as text) & linefeed & (duration of t as text) & linefeed & (persistent ID of t)
   else
     return "stopped"
   end if
@@ -40,9 +40,13 @@ tell application "Music"
 end tell`;
 }
 
+const LOG = path.join(__dirname, "debug.log");
 function osa(script) {
   return new Promise((resolve) => {
-    execFile("osascript", ["-e", script], { timeout: 8000 }, (err, stdout) => {
+    execFile("osascript", ["-e", script], { timeout: 8000 }, (err, stdout, stderr) => {
+      if (err) {
+        fs.appendFile(LOG, `[${new Date().toISOString()}] osascript error: ${(stderr || err.message).trim()}\n`, () => {});
+      }
       resolve(err ? null : stdout.trim());
     });
   });
@@ -93,13 +97,12 @@ ipcMain.on("control", (_e, cmd) => {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 520,
-    height: 580,
+    width: 380,
+    height: 420,
     frame: false,
     transparent: true,
     hasShadow: false,
     resizable: false,
-    alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
