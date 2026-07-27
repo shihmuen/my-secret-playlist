@@ -107,7 +107,7 @@
   .player:hover{--dy:210px;}
   .player:hover .disc{transform:translate(-50%,-50%) translateY(var(--dy)) scale(1.02);}
   .player:hover .cover{opacity:1;transform:scale(1);}
-  .player:hover .hub{opacity:.25;}
+  .player:hover .hub{opacity:0;}
   .player:hover .info{opacity:0;transform:translateY(8px);}
 
   /* ── 換片：CD 退出插槽 ──────────────────── */
@@ -117,8 +117,8 @@
 
   /* ── 曲目資訊 ──────────────────────────── */
   .info{
-    position:absolute;left:0;right:0;top:53%;
-    display:flex;flex-direction:column;align-items:center;gap:9px;
+    position:absolute;left:0;right:0;top:57%;
+    display:flex;flex-direction:column;align-items:center;gap:10px;
     transition:opacity .3s ease,transform .3s ease;
   }
   .wave{display:flex;align-items:center;gap:3px;height:18px;}
@@ -156,7 +156,6 @@
   .controls button:active{transform:scale(.94);}
   .controls svg{width:20px;height:20px;stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
   .controls .play svg{fill:currentColor;stroke:none;}
-  .hint{font-size:12.5px;color:#b3b3b5;letter-spacing:.02em;}
 
   @media (prefers-reduced-motion: reduce){
     .disc-face{animation:none;}
@@ -171,12 +170,12 @@
       <div class="disc" id="disc">
         <div class="disc-face" id="discFace"></div>
       </div>
+      <div class="hub"></div>
       <div class="cover" id="cover">
         <div class="a" id="coverArtist"></div>
         <div class="t" id="coverTitle"></div>
       </div>
     </div>
-    <div class="hub"></div>
     <div class="info">
       <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
       <div class="artist" id="artist"></div>
@@ -191,7 +190,6 @@
     <button id="toggle" class="play" aria-label="播放/暫停"><svg id="playIcon" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20"/></svg></button>
     <button id="next" aria-label="下一首"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
   </div>
-  <div class="hint">hover 卡片看完整封面・Phase 0 假資料原型</div>
 
 <script>
 (() => {
@@ -213,8 +211,7 @@
         const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(t.q)}&media=music&entity=song&limit=1&country=tw`);
         const hit = (await res.json()).results[0];
         if (!hit) return;
-        t.artist = hit.artistName;
-        t.title  = hit.trackName;
+        // 歌手/歌名以歌單寫的原文為準，API 只拿封面與長度（避免被商店在地化翻譯）
         t.dur    = Math.round(hit.trackTimeMillis / 1000);
         t.img    = hit.artworkUrl100.replace("100x100", "600x600");
         await new Promise(ok => { const im = new Image(); im.onload = im.onerror = ok; im.src = t.img; });
