@@ -74,27 +74,21 @@
     mix-blend-mode:screen;
   }
   /* ── 插槽軸心（不被卡片裁切，露出卡片上緣） ── */
+  /* 邊緣俐落的同心圓環，不做暈開光暈 */
   .hub{
     position:absolute;left:50%;top:0;
-    width:96px;height:96px;border-radius:50%;
-    opacity:.85;
+    width:84px;height:84px;border-radius:50%;
     transform:translate(-50%,-50%) translateY(var(--dy));
     transition:transform .65s cubic-bezier(.32,.72,.28,1),opacity .4s ease;
     background:
-      radial-gradient(circle at 50% 42%,
-        rgba(255,255,255,.85) 0%, rgba(238,238,238,.9) 26%,
-        rgba(196,196,198,.95) 27%, rgba(214,214,215,.92) 44%,
-        rgba(178,178,181,.95) 45%, rgba(205,205,207,.55) 58%,
-        rgba(190,190,192,.35) 70%, rgba(180,180,182,0) 71%);
-    box-shadow:0 4px 12px rgba(0,0,0,.14);
+      radial-gradient(circle,
+        var(--page-bg) 0 15%,
+        #cfcfce 15.5% 18%,
+        #f0f0ef 18.5% 42%,
+        #d9d9d8 42.5% 47%,
+        #ebebea 47.5% 100%);
+    box-shadow:0 2px 8px rgba(0,0,0,.16);
     pointer-events:none;
-  }
-  .hub::after{ /* 中心孔 */
-    content:"";position:absolute;left:50%;top:50%;
-    width:30px;height:30px;border-radius:50%;
-    transform:translate(-50%,-50%);
-    background:var(--page-bg);
-    box-shadow:inset 0 1px 3px rgba(0,0,0,.25);
   }
 
   /* ── hover：CD 滑下展開成完整專輯封面 ────── */
@@ -201,24 +195,34 @@
 
 <script>
 (() => {
-  // ── 假資料：三張虛構專輯（之後 Phase 1 換成 Music App 真資料） ──
+  // ── Demo 歌單：真實歌曲，封面與長度用 iTunes Search API 抓 ──
+  // （歌單內容可自由換：改 q 搜尋字串即可；載入失敗時退回漸層底）
   const tracks = [
-    {
-      artist: "Neon Coast", title: "Midnight Drive", dur: 192,
-      art: `linear-gradient(160deg,#2b2f55 0%,#4a3d78 45%,#8a4d8f 78%,#d9788f 100%),
-            radial-gradient(circle at 72% 24%,rgba(255,170,190,.55) 0%,rgba(255,170,190,0) 42%)`
-    },
-    {
-      artist: "Paper Moon", title: "Slow Waves", dur: 167,
-      art: `linear-gradient(200deg,#f0e5d2 0%,#c9d8cf 40%,#5e8f8a 78%,#2f5a5c 100%),
-            radial-gradient(circle at 30% 78%,rgba(255,244,214,.6) 0%,rgba(255,244,214,0) 46%)`
-    },
-    {
-      artist: "Glass Garden", title: "Bloom", dur: 185,
-      art: `linear-gradient(150deg,#15241a 0%,#2e5230 45%,#6f9440 75%,#d8c94f 100%),
-            radial-gradient(circle at 68% 70%,rgba(230,255,150,.4) 0%,rgba(230,255,150,0) 40%)`
-    }
+    { q: "Fujii Kaze Shinunoga E-Wa",        artist: "Fujii Kaze", title: "死ぬのがいいわ", dur: 185,
+      art: "linear-gradient(160deg,#2b2f55 0%,#4a3d78 45%,#8a4d8f 78%,#d9788f 100%)" },
+    { q: "NewJeans Ditto",                    artist: "NewJeans", title: "Ditto", dur: 187,
+      art: "linear-gradient(200deg,#f0e5d2 0%,#c9d8cf 40%,#5e8f8a 78%,#2f5a5c 100%)" },
+    { q: "Norah Jones Don't Know Why",        artist: "Norah Jones", title: "Don't Know Why", dur: 186,
+      art: "linear-gradient(150deg,#15241a 0%,#2e5230 45%,#6f9440 75%,#d8c94f 100%)" }
   ];
+
+  // 開頁先抓齊三首的官方封面/長度/正式名稱，抓到就更新資料
+  async function hydrate(){
+    await Promise.all(tracks.map(async t => {
+      try{
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(t.q)}&media=music&entity=song&limit=1&country=tw`);
+        const hit = (await res.json()).results[0];
+        if (!hit) return;
+        t.artist = hit.artistName;
+        t.title  = hit.trackName;
+        t.dur    = Math.round(hit.trackTimeMillis / 1000);
+        t.img    = hit.artworkUrl100.replace("100x100", "600x600");
+        await new Promise(ok => { const im = new Image(); im.onload = im.onerror = ok; im.src = t.img; });
+      }catch(e){ /* 離線或 API 失敗 → 保留漸層 fallback */ }
+    }));
+    applyArt(tracks[idx]);   // 重新套用目前這首（含封面）
+    render();
+  }
 
   const $ = id => document.getElementById(id);
   const player = $("player");
@@ -227,9 +231,11 @@
   const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`;
 
   function applyArt(t){
-    player.style.setProperty("--art", t.art.replace(/\n\s*/g,""));
-    $("discFace").style.background = t.art.replace(/\n\s*/g,"");
-    $("cover").style.background = t.art.replace(/\n\s*/g,"");
+    const art = t.img
+      ? `url("${t.img}") center / cover no-repeat`
+      : t.art.replace(/\n\s*/g,"");
+    $("discFace").style.background = art;
+    $("cover").style.background = art;
     $("artist").textContent = t.artist;
     $("title").textContent = t.title;
     $("coverArtist").textContent = t.title;
@@ -285,6 +291,7 @@
   // 開場：從退片位置插入第一張 CD
   // 不用 rAF（背景分頁會被瀏覽器凍結，開場就卡住），改用 setTimeout
   applyArt(tracks[0]);
+  hydrate();                        // 背景抓真封面，抓到後自動換上
   cur = 75; render();               // 模擬播到一半的畫面（對齊參考圖 1:15）
   player.classList.add("eject");
   void player.offsetWidth;          // 強制 reflow，確保退片起始狀態先生效
