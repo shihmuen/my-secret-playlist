@@ -1,7 +1,7 @@
 // My Playlist — Electron 主程序
 // 職責：開一個無邊框透明小視窗 + 每秒用 AppleScript 問 Music App 播放狀態
 
-const { app, BrowserWindow, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const { execFile } = require("child_process");
 const fs = require("fs");
 const os = require("os");
@@ -65,16 +65,21 @@ async function poll() {
   }
 
   const [state, name, artist, pos, dur, id] = out.split("\n");
-  let art = path.join(os.tmpdir(), `my-playlist-art-${id}.png`);
+  const artFile = path.join(os.tmpdir(), `my-playlist-art-${id}.png`);
 
   if (id !== lastId) {
-    if (!fs.existsSync(art)) {
-      const ok = await osa(artScript(art));
-      if (ok !== "ok") art = null;
-    }
+    if (!fs.existsSync(artFile)) await osa(artScript(artFile));
     lastId = id;
-  } else if (!fs.existsSync(art)) {
-    art = null;
+  }
+
+  // 封面用 data URL 傳（取色的 canvas 讀 file:// 會被安全限制擋）
+  let art = null;
+  if (artCache.has(id)) {
+    art = artCache.get(id);
+  } else if (fs.existsSync(artFile)) {
+    art = "data:image/png;base64," + fs.readFileSync(artFile).toString("base64");
+    artCache.set(id, art);
+    if (artCache.size > 20) artCache.delete(artCache.keys().next().value);
   }
 
   win.webContents.send("now-playing", {
@@ -87,40 +92,7 @@ async function poll() {
     art,
   });
 }
-
-// ── 假毛玻璃：抓桌布圖，連同視窗座標送給畫面對位 ──
-const WALL_SCRIPT = `tell application "System Events" to get picture of current desktop`;
-let wallPath = null;
-let wallSrcKey = null;
-
-async function fetchWallpaper() {
-  let p = await osa(WALL_SCRIPT);
-  if (!p) return;
-  p = p.trim();
-  let key;
-  try { key = p + ":" + fs.statSync(p).mtimeMs; } catch (e) { return; }
-  if (key === wallSrcKey) return;   // 桌布沒換就不重做
-  // 原圖可能超大（百 MB 級）或 HEIC；統一縮成 1600px JPEG（模糊用，細節無感）
-  const out = path.join(os.tmpdir(), "my-playlist-wall.jpg");
-  await new Promise((r) => execFile("sips", ["-s", "format", "jpeg", "-Z", "1600", p, "--out", out], () => r()));
-  if (!fs.existsSync(out)) return;
-  wallSrcKey = key;
-  wallPath = out;
-  sendGlass();
-}
-
-function sendGlass() {
-  if (!win || !wallPath) return;
-  const b = win.getBounds();
-  const d = screen.getDisplayMatching(b);
-  win.webContents.send("glass", {
-    path: wallPath,
-    dw: d.bounds.width,
-    dh: d.bounds.height,
-    wx: b.x - d.bounds.x,
-    wy: b.y - d.bounds.y,
-  });
-}
+const artCache = new Map();
 
 // ── 播放控制（白名單指令） ──
 const COMMANDS = {
@@ -131,6 +103,15 @@ const COMMANDS = {
 ipcMain.on("control", (_e, cmd) => {
   if (COMMANDS[cmd]) osa(`tell application "Music" to ${COMMANDS[cmd]}`);
 });
+
+// ── 右下角把手縮放：鎖比例、限制範圍 ──
+ipcMain.on("resize-to", (_e, w) => {
+  if (!win || !Number.isFinite(w)) return;
+  const width = Math.max(240, Math.min(800, Math.round(w)));
+  const b = win.getBounds();
+  win.setBounds({ x: b.x, y: b.y, width, height: Math.round(width / ASPECT) });
+});
+ipcMain.on("resize-end", () => saveBounds());
 
 // ── 視窗位置＋大小記憶：拖到哪、縮多大，下次開就照舊 ──
 const ASPECT = 380 / 420;
@@ -170,9 +151,6 @@ function createWindow() {
   });
   win.setAspectRatio(ASPECT);     // 鎖定比例，縮放不變形
   win.loadFile("widget.html");
-  win.webContents.on("did-finish-load", sendGlass);
-  win.on("move", sendGlass);      // 拖曳中即時對位模糊桌布
-  win.on("resize", sendGlass);
   win.on("moved", saveBounds);
   win.on("resized", saveBounds);
   win.on("closed", () => (win = null));
@@ -182,8 +160,6 @@ app.whenReady().then(() => {
   createWindow();
   poll();
   setInterval(poll, 1000);
-  fetchWallpaper();
-  setInterval(fetchWallpaper, 60000);   // 桌布換了最慢一分鐘內跟上
 });
 
 app.on("window-all-closed", () => app.quit());
