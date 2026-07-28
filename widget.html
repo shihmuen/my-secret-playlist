@@ -172,20 +172,19 @@
   .time{font-size:calc(19px * var(--s));font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;transition:color .6s ease;}
   .time span{color:var(--ink-soft);font-weight:500;}
 
-  /* ── 縮放把手：hover 卡片時浮現於右下角，拖它縮放 ── */
+  /* ── 縮放把手：貼著右下圓角外側的一條弧線（hover 浮現） ── */
   .grip{
     position:absolute;
-    right:calc(20px * var(--s));bottom:calc(20px * var(--s));
-    width:calc(30px * var(--s));height:calc(30px * var(--s));
+    right:calc(-16px * var(--s));bottom:calc(-16px * var(--s));
+    width:calc(44px * var(--s));height:calc(44px * var(--s));
     cursor:nwse-resize;
     -webkit-app-region:no-drag;
     opacity:0;transition:opacity .25s ease;
     z-index:6;
-    display:flex;align-items:flex-end;justify-content:flex-end;
     touch-action:none;
   }
   .player:hover .grip{opacity:1;}
-  .grip svg{width:70%;height:70%;stroke:var(--ink-soft);stroke-width:2.4;stroke-linecap:round;}
+  .grip svg{width:100%;height:100%;stroke:var(--ink);stroke-width:3;stroke-linecap:round;fill:none;}
 
   /* 空狀態：Music App 沒在播 */
   .player.empty .info{top:44%;}
@@ -218,7 +217,7 @@
       <div class="time"><span id="cur">-:--</span> <span>/ <span id="dur">-:--</span></span></div>
     </div>
     <div class="grip" id="grip" title="拖曳縮放大小">
-      <svg viewBox="0 0 20 20" fill="none"><path d="M17 9 L9 17"/><path d="M17 14 L14 17"/></svg>
+      <svg viewBox="0 0 44 44"><path d="M 34 12 A 24 24 0 0 1 12 34"/></svg>
     </div>
   </div>
 
@@ -371,6 +370,18 @@
   }, 250);
 
   $("disc").addEventListener("click", () => window.mp.control("playpause"));
+
+  // ── hover 離開時讓 CD 從正面重新開始轉：封面（正的）縮回去時底下的 CD 也是正的，銜接不突兀 ──
+  // 快速掃過（封面還沒蓋住 CD）不歸零，避免看得到的角度跳動
+  let hoverAt = 0;
+  player.addEventListener("mouseenter", () => { hoverAt = performance.now(); });
+  player.addEventListener("mouseleave", () => {
+    if (performance.now() - hoverAt < 350) return;
+    const f = $("discFace");
+    f.style.animation = "none";
+    void f.offsetWidth;               // 強制 reflow，讓旋轉歸零生效
+    f.style.animation = "";
+  });
 
   // ── 右下角把手：拖曳縮放（pointer capture，拖出視窗外也追得到） ──
   const grip = $("grip");

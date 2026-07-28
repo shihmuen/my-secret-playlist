@@ -289,6 +289,18 @@
     }, 660);
   }
 
+  // hover 離開時讓 CD 從正面重新開始轉，跟正面的封面銜接不突兀
+  // 快速掃過（封面還沒蓋住 CD）不歸零，避免看得到的角度跳動
+  let hoverAt = 0;
+  player.addEventListener("mouseenter", () => { hoverAt = performance.now(); });
+  player.addEventListener("mouseleave", () => {
+    if (performance.now() - hoverAt < 350) return;
+    const f = $("discFace");
+    f.style.animation = "none";
+    void f.offsetWidth;
+    f.style.animation = "";
+  });
+
   $("toggle").addEventListener("click", () => setPlaying(!playing));
   $("next").addEventListener("click", () => change(1));
   $("prev").addEventListener("click", () => change(-1));
