@@ -98,8 +98,10 @@ ipcMain.on("control", (_e, cmd) => {
   if (COMMANDS[cmd]) osa(`tell application "Music" to ${COMMANDS[cmd]}`);
 });
 
-// ── 視窗位置記憶：拖到哪、下次開就在哪 ──
-function loadPosition() {
+// ── 視窗位置＋大小記憶：拖到哪、縮多大，下次開就照舊 ──
+const ASPECT = 380 / 420;
+
+function loadBounds() {
   try {
     const p = JSON.parse(fs.readFileSync(POS_FILE(), "utf8"));
     if (Number.isFinite(p.x) && Number.isFinite(p.y)) return p;
@@ -107,26 +109,35 @@ function loadPosition() {
   return null;
 }
 
+function saveBounds() {
+  if (!win) return;
+  const b = win.getBounds();
+  fs.writeFile(POS_FILE(), JSON.stringify(b), () => {});
+}
+
 function createWindow() {
-  const saved = loadPosition();
+  const saved = loadBounds();
   win = new BrowserWindow({
-    width: 380,
-    height: 420,
+    width: saved?.width || 380,
+    height: saved?.height || 420,
     ...(saved ? { x: saved.x, y: saved.y } : {}),
+    minWidth: 240,
+    minHeight: 265,
+    maxWidth: 800,
+    maxHeight: 884,
     frame: false,
     transparent: true,
     hasShadow: false,
-    resizable: false,
+    resizable: true,              // 從視窗邊緣拖曳縮放
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
     },
   });
+  win.setAspectRatio(ASPECT);     // 鎖定比例，縮放不變形
   win.loadFile("widget.html");
-  win.on("moved", () => {
-    const [x, y] = win.getPosition();
-    fs.writeFile(POS_FILE(), JSON.stringify({ x, y }), () => {});
-  });
+  win.on("moved", saveBounds);
+  win.on("resized", saveBounds);
   win.on("closed", () => (win = null));
 }
 

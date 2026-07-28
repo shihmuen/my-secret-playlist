@@ -98,9 +98,10 @@
     position:absolute;inset:0;border-radius:inherit;
     background:var(--art,#333);
     background-size:cover;background-position:center;
-    opacity:0;transform:scale(1.04);
-    transition:opacity .3s ease, transform .55s cubic-bezier(.32,.72,.28,1);
-    will-change:opacity,transform;
+    opacity:0;
+    clip-path:circle(226px at 50% 0%);
+    transition:clip-path .55s cubic-bezier(.32,.72,.28,1), opacity .18s ease .3s;
+    will-change:clip-path,opacity;
     pointer-events:none;
     display:flex;flex-direction:column;justify-content:flex-end;
     padding:44px 48px;
@@ -111,8 +112,9 @@
   .player:hover{--dy:210px;}
   .player:hover .disc{transform:translate(-50%,-50%) translateY(var(--dy)) scale(1.02);}
   .player:hover .cover{
-    opacity:1;transform:scale(1);
-    transition:opacity .4s ease .1s, transform .55s cubic-bezier(.32,.72,.28,1) .05s;
+    opacity:1;
+    clip-path:circle(304px at 50% 50%);
+    transition:clip-path .55s cubic-bezier(.32,.72,.28,1), opacity .1s ease;
   }
   .player:hover .hub{opacity:0;}
   .player:hover .info{opacity:0;transform:translateY(8px);}

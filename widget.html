@@ -5,16 +5,33 @@
 <title>My Playlist</title>
 <style>
   :root{
-    --s:0.72;                          /* 桌面 widget 縮放比例（真實尺寸，不用 zoom：zoom 會讓視窗拖曳失效） */
-    --page-bg:#f1f1f0;
-    --card-hi:#ececeb;
-    --card-lo:#d7d6d5;
+    --s:0.72;                          /* 縮放比例：由 JS 依視窗大小即時計算（基準寬 528 = 380/0.72） */
+    /* ── 淺色玻璃 ── */
+    --card-hi:rgba(255,255,255,.58);
+    --card-lo:rgba(233,233,232,.52);
+    --card-edge:rgba(255,255,255,.65);
     --ink:#1c1c1e;
-    --ink-soft:#a5a5a7;
+    --ink-soft:rgba(60,60,67,.55);
+    --wave:#8f8f92;
+    --bar-bg:rgba(60,60,67,.22);
+    --bar-fill:rgba(60,60,67,.65);
     --card-size:calc(420px * var(--s));
     --card-radius:calc(76px * var(--s));
     --disc-size:calc(444px * var(--s));
     --dy:0px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      /* ── 深色玻璃 ── */
+      --card-hi:rgba(50,50,53,.60);
+      --card-lo:rgba(28,28,30,.62);
+      --card-edge:rgba(255,255,255,.14);
+      --ink:#f5f5f7;
+      --ink-soft:rgba(235,235,245,.55);
+      --wave:rgba(235,235,245,.5);
+      --bar-bg:rgba(235,235,245,.22);
+      --bar-fill:rgba(235,235,245,.7);
+    }
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{height:100%;background:transparent;}
@@ -33,9 +50,9 @@
     border-radius:var(--card-radius);
     background:linear-gradient(180deg,var(--card-hi) 0%,var(--card-lo) 100%);
     box-shadow:
-      0 22px 44px -14px rgba(0,0,0,.22),
-      0 8px 18px -8px rgba(0,0,0,.10),
-      inset 0 1px 0 rgba(255,255,255,.65);
+      0 22px 44px -14px rgba(0,0,0,.28),
+      0 8px 18px -8px rgba(0,0,0,.12),
+      inset 0 0 0 1px var(--card-edge);
   }
 
   .clip{position:absolute;inset:0;border-radius:inherit;overflow:hidden;}
@@ -84,29 +101,46 @@
     box-shadow:0 2px 6px rgba(0,0,0,.14);
     pointer-events:none;
   }
+  @media (prefers-color-scheme: dark){
+    .hub{
+      background:
+        radial-gradient(circle,
+          rgba(70,70,72,.35) 0 15%,
+          rgba(150,150,152,.5) 15.5% 18%,
+          rgba(95,95,98,.45) 18.5% 42%,
+          rgba(155,155,158,.5) 42.5% 47%,
+          rgba(85,85,88,.4) 47.5% 100%);
+    }
+  }
 
+  /* ── 封面：圓形遮罩跟著 CD 移動、抵達中央後擴張成整張——像 CD 長成封面 ── */
   .cover{
     position:absolute;inset:0;border-radius:inherit;
     background:linear-gradient(160deg,#c9c9c8 0%,#b4b4b3 100%);
     background-size:cover;background-position:center;
-    opacity:0;transform:scale(1.04);
-    /* 移開時不帶延遲，直接順順退場 */
-    transition:opacity .3s ease, transform .55s cubic-bezier(.32,.72,.28,1);
-    will-change:opacity,transform;
+    opacity:0;
+    clip-path:circle(calc(226px * var(--s)) at 50% 0%);
+    /* 移開＝縮回：遮罩跟著 CD 回插槽，尾段才淡出 */
+    transition:clip-path .55s cubic-bezier(.32,.72,.28,1), opacity .18s ease .3s;
+    will-change:clip-path,opacity;
     pointer-events:none;
     display:flex;flex-direction:column;justify-content:flex-end;
     padding:calc(44px * var(--s)) calc(48px * var(--s));
   }
-  .cover .a{color:#fff;font-size:calc(24px * var(--s));font-weight:800;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 2px 10px rgba(0,0,0,.45);}
-  .cover .t{color:rgba(255,255,255,.88);font-size:calc(14px * var(--s));font-weight:600;letter-spacing:.12em;text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.4);}
+  .cover .a{color:#fff;font-size:calc(24px * var(--s));font-weight:800;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 2px 10px rgba(0,0,0,.45);
+    opacity:0;transform:translateY(6px);transition:opacity .25s ease, transform .3s ease;}
+  .cover .t{color:rgba(255,255,255,.88);font-size:calc(14px * var(--s));font-weight:600;letter-spacing:.12em;text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.4);
+    opacity:0;transform:translateY(6px);transition:opacity .25s ease, transform .3s ease;}
 
   .player:not(.empty):hover{--dy:calc(210px * var(--s));}
   .player:not(.empty):hover .disc{transform:translate(-50%,-50%) translateY(var(--dy)) scale(1.02);}
   .player:not(.empty):hover .cover{
-    opacity:1;transform:scale(1);
-    /* 進場時封面稍晚於 CD 起跑，交疊得比較自然 */
-    transition:opacity .4s ease .1s, transform .55s cubic-bezier(.32,.72,.28,1) .05s;
+    opacity:1;
+    clip-path:circle(calc(304px * var(--s)) at 50% 50%);
+    transition:clip-path .55s cubic-bezier(.32,.72,.28,1), opacity .1s ease;
   }
+  .player:not(.empty):hover .cover .a,
+  .player:not(.empty):hover .cover .t{opacity:1;transform:translateY(0);transition-delay:.3s;}
   .player:not(.empty):hover .hub{opacity:0;}
   .player:not(.empty):hover .info{opacity:0;transform:translateY(8px);}
 
@@ -120,7 +154,7 @@
     transition:opacity .3s ease,transform .3s ease;
   }
   .wave{display:flex;align-items:center;gap:2px;height:calc(18px * var(--s));}
-  .wave i{width:2px;border-radius:2px;background:#8f8f92;animation:bounce 1s ease-in-out infinite;}
+  .wave i{width:2px;border-radius:2px;background:var(--wave);animation:bounce 1s ease-in-out infinite;}
   .wave i:nth-child(1){height:calc(8px * var(--s));animation-delay:0s;}
   .wave i:nth-child(2){height:calc(14px * var(--s));animation-delay:.15s;}
   .wave i:nth-child(3){height:calc(18px * var(--s));animation-delay:.3s;}
@@ -132,8 +166,8 @@
   .artist{font-size:calc(19px * var(--s));font-weight:500;color:var(--ink-soft);letter-spacing:.01em;max-width:calc(340px * var(--s));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .title{font-size:calc(23px * var(--s));font-weight:700;color:var(--ink);letter-spacing:-.01em;margin-top:-2px;max-width:calc(340px * var(--s));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
-  .bar{width:calc(66px * var(--s));height:3px;border-radius:2px;background:#c2c2c3;overflow:hidden;margin-top:2px;}
-  .bar b{display:block;height:100%;width:0%;background:#68686b;border-radius:2px;transition:width .25s linear;}
+  .bar{width:calc(66px * var(--s));height:3px;border-radius:2px;background:var(--bar-bg);overflow:hidden;margin-top:2px;}
+  .bar b{display:block;height:100%;width:0%;background:var(--bar-fill);border-radius:2px;transition:width .25s linear;}
 
   .time{font-size:calc(19px * var(--s));font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;}
   .time span{color:var(--ink-soft);font-weight:500;}
@@ -177,6 +211,13 @@
   const FALLBACK = "linear-gradient(160deg,#c9c9c8 0%,#b4b4b3 100%)";
 
   let curId = null, playing = false, pos = 0, dur = 0, switching = false;
+
+  // 視窗縮放 → 內容等比縮放（基準：寬 528px 時 --s = 1）
+  function fit(){
+    document.documentElement.style.setProperty("--s", (window.innerWidth / 528).toFixed(4));
+  }
+  window.addEventListener("resize", fit);
+  fit();
 
   const fmt = s => isFinite(s) && s >= 0
     ? `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`
