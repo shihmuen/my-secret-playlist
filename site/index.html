@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Playlist — 桌面上一張會轉的 CD</title>
+<meta name="description" content="把正在播的音樂變成桌面上一張會轉的 CD。支援 Apple Music 與 Spotify 的 macOS 桌面小工具。">
+<meta property="og:title" content="My Playlist">
+<meta property="og:description" content="把正在播的音樂，變成桌面上一張會轉的 CD。支援 Apple Music 與 Spotify。">
+<meta property="og:image" content="/og.png">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  :root{
+    --page-bg:#f1f1f0;
+    --card-hi:#ececeb;
+    --card-lo:#d7d6d5;
+    --ink:#1c1c1e;
+    --ink-soft:#a5a5a7;
+    --card-size:420px;
+    --card-radius:76px;
+    --disc-size:444px;
+    --dy:0px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    background:var(--page-bg);
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "PingFang TC", sans-serif;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;align-items:center;
+  }
+
+  header{padding:72px 24px 8px;text-align:center;}
+  header h1{font-size:34px;font-weight:800;letter-spacing:-.02em;}
+  header p{margin-top:10px;font-size:16px;color:#7c7c7f;}
+
+  /* ── 互動 demo（手機時等比縮小） ── */
+  .stage{
+    display:flex;flex-direction:column;align-items:center;gap:34px;
+    padding:56px 0 8px;
+    transform-origin:top center;
+  }
+
+  .player{
+    position:relative;
+    width:var(--card-size);height:var(--card-size);
+    border-radius:var(--card-radius);
+    background:linear-gradient(180deg,var(--card-hi) 0%,var(--card-lo) 100%);
+    box-shadow:
+      0 30px 60px -18px rgba(0,0,0,.22),
+      0 10px 24px -10px rgba(0,0,0,.10),
+      inset 0 1px 0 rgba(255,255,255,.65);
+  }
+  .clip{position:absolute;inset:0;border-radius:inherit;overflow:hidden;}
+  .disc{
+    position:absolute;left:50%;top:0;
+    width:var(--disc-size);height:var(--disc-size);
+    transform:translate(-50%,-50%) translateY(var(--dy));
+    transition:transform .55s cubic-bezier(.32,.72,.28,1);
+    will-change:transform;
+    filter:drop-shadow(0 14px 22px rgba(0,0,0,.28));
+    cursor:pointer;
+  }
+  .disc-face{
+    width:100%;height:100%;border-radius:50%;
+    background:linear-gradient(160deg,#c9c9c8 0%,#b4b4b3 100%);
+    background-size:cover;background-position:center;
+    animation:spin 9s linear infinite;
+    position:relative;overflow:hidden;
+  }
+  .player.paused .disc-face{animation-play-state:paused;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .disc-face::before{
+    content:"";position:absolute;inset:0;border-radius:50%;
+    background:conic-gradient(from 20deg,
+      rgba(255,255,255,0) 0deg, rgba(255,255,255,.20) 40deg, rgba(255,255,255,0) 90deg,
+      rgba(255,255,255,0) 170deg, rgba(255,255,255,.14) 215deg, rgba(255,255,255,0) 260deg);
+    mix-blend-mode:screen;
+  }
+  .hub{
+    position:absolute;left:50%;top:0;
+    width:84px;height:84px;border-radius:50%;
+    transform:translate(-50%,-50%) translateY(var(--dy));
+    transition:transform .55s cubic-bezier(.32,.72,.28,1),opacity .3s ease;
+    background:
+      radial-gradient(circle,
+        rgba(238,238,237,.30) 0 15%,
+        rgba(180,180,180,.60) 15.5% 18%,
+        rgba(244,244,243,.55) 18.5% 42%,
+        rgba(188,188,188,.60) 42.5% 47%,
+        rgba(232,232,231,.45) 47.5% 100%);
+    backdrop-filter:blur(2px);
+    -webkit-backdrop-filter:blur(2px);
+    box-shadow:0 2px 8px rgba(0,0,0,.14);
+    pointer-events:none;
+  }
+  .cover{
+    position:absolute;inset:0;border-radius:inherit;
+    background:linear-gradient(160deg,#c9c9c8 0%,#b4b4b3 100%);
+    background-size:cover;background-position:center;
+    opacity:0;
+    clip-path:circle(226px at 50% 0%);
+    transition:clip-path .55s cubic-bezier(.32,.72,.28,1), opacity .18s ease .3s;
+    will-change:clip-path,opacity;
+    pointer-events:none;
+    display:flex;flex-direction:column;justify-content:flex-end;
+    padding:44px 48px;
+  }
+  .cover .a{color:#fff;font-size:24px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 2px 10px rgba(0,0,0,.45);}
+  .cover .t{color:rgba(255,255,255,.88);font-size:14px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.4);}
+  .player:hover{--dy:210px;}
+  .player:hover .disc{transform:translate(-50%,-50%) translateY(var(--dy)) scale(1.02);}
+  .player:hover .cover{
+    opacity:1;
+    clip-path:circle(304px at 50% 50%);
+    transition:clip-path .55s cubic-bezier(.32,.72,.28,1), opacity .1s ease;
+  }
+  .player:hover .hub{opacity:0;}
+  .player:hover .info{opacity:0;transform:translateY(8px);}
+  .player.eject{--dy:-300px;}
+  .player.eject .hub{opacity:0;}
+  .player.eject .disc{filter:drop-shadow(0 4px 10px rgba(0,0,0,.15));}
+
+  .info{
+    position:absolute;left:0;right:0;top:57%;
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+    transition:opacity .3s ease,transform .3s ease;
+  }
+  .wave{display:flex;align-items:center;gap:3px;height:18px;}
+  .wave i{width:3px;border-radius:2px;background:#8f8f92;animation:bounce 1s ease-in-out infinite;}
+  .wave i:nth-child(1){height:8px;animation-delay:0s;}
+  .wave i:nth-child(2){height:14px;animation-delay:.15s;}
+  .wave i:nth-child(3){height:18px;animation-delay:.3s;}
+  .wave i:nth-child(4){height:12px;animation-delay:.45s;}
+  .wave i:nth-child(5){height:7px;animation-delay:.6s;}
+  @keyframes bounce{0%,100%{transform:scaleY(.55);}50%{transform:scaleY(1);}}
+  .player.paused .wave i{animation-play-state:paused;transform:scaleY(.4);}
+  .artist{font-size:19px;font-weight:500;color:var(--ink-soft);}
+  .title{font-size:23px;font-weight:700;color:var(--ink);margin-top:-3px;}
+  .bar{width:66px;height:4px;border-radius:2px;background:#c2c2c3;overflow:hidden;margin-top:2px;}
+  .bar b{display:block;height:100%;width:0%;background:#68686b;border-radius:2px;transition:width .25s linear;}
+  .time{font-size:19px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .time span{color:var(--ink-soft);font-weight:500;}
+
+  .controls{display:flex;align-items:center;gap:18px;}
+  .controls button{
+    width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;
+    background:#e6e6e5;color:#59595c;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 4px 12px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.7);
+    transition:transform .15s ease, background .15s ease;
+  }
+  .controls button:hover{background:#dedddc;transform:translateY(-1px);}
+  .controls button:active{transform:scale(.94);}
+  .controls svg{width:20px;height:20px;stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .controls .play svg{fill:currentColor;stroke:none;}
+  .hint{font-size:13px;color:#b3b3b5;}
+
+  /* ── 下載區 ── */
+  .download{padding:64px 24px 8px;text-align:center;max-width:640px;}
+  .download h2{font-size:22px;font-weight:800;letter-spacing:-.01em;}
+  .download p.sub{margin-top:10px;font-size:15px;color:#7c7c7f;line-height:1.7;}
+  .dl-buttons{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:26px;}
+  .dl-buttons a{
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:14px 28px;border-radius:16px;text-decoration:none;
+    background:#1c1c1e;color:#fff;
+    box-shadow:0 8px 20px -8px rgba(0,0,0,.35);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .dl-buttons a:hover{transform:translateY(-2px);box-shadow:0 12px 26px -8px rgba(0,0,0,.4);}
+  .dl-buttons .big{font-size:15px;font-weight:700;}
+  .dl-buttons .small{font-size:12px;opacity:.65;}
+  .req{margin-top:16px;font-size:12.5px;color:#b3b3b5;}
+
+  /* ── 安裝說明 ── */
+  .steps{padding:48px 24px 24px;max-width:560px;width:100%;}
+  .steps h3{font-size:15px;font-weight:700;color:#7c7c7f;text-align:center;margin-bottom:22px;letter-spacing:.05em;}
+  .steps ol{list-style:none;display:flex;flex-direction:column;gap:14px;}
+  .steps li{
+    background:#e9e9e8;border-radius:16px;padding:16px 20px;
+    font-size:14.5px;line-height:1.7;color:#48484a;
+    display:flex;gap:14px;align-items:flex-start;
+  }
+  .steps li b.n{
+    flex:none;width:26px;height:26px;border-radius:50%;
+    background:#1c1c1e;color:#fff;font-size:13px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;margin-top:2px;
+  }
+  .steps li strong{color:#1c1c1e;}
+
+  footer{padding:56px 24px 48px;font-size:13px;color:#b3b3b5;text-align:center;line-height:1.8;}
+
+  @media (max-width:560px){
+    header{padding-top:48px;}
+    header h1{font-size:28px;}
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <h1>My Playlist</h1>
+    <p>把正在播的音樂，變成桌面上一張會轉的 CD</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="player paused" id="player">
+      <div class="clip">
+        <div class="disc" id="disc">
+          <div class="disc-face" id="discFace"></div>
+        </div>
+        <div class="hub"></div>
+        <div class="cover" id="cover">
+          <div class="a" id="coverArtist"></div>
+          <div class="t" id="coverTitle"></div>
+        </div>
+      </div>
+      <div class="info">
+        <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="artist" id="artist"></div>
+        <div class="title" id="title"></div>
+        <div class="bar"><b id="barFill"></b></div>
+        <div class="time"><span id="cur">0:00</span> <span>/ <span id="dur">0:00</span></span></div>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="prev" aria-label="上一首"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <button id="toggle" class="play" aria-label="播放/暫停"><svg id="playIcon" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20"/></svg></button>
+      <button id="next" aria-label="下一首"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+    </div>
+    <div class="hint">這張卡片可以玩：hover 展開封面・按箭頭換片</div>
+  </div>
+
+  <section class="download">
+    <h2>下載 Mac 版</h2>
+    <p class="sub">裝在桌面上，自動顯示你正在聽的歌——<br>支援 <strong>Apple Music</strong> 與 <strong>Spotify</strong>，誰在播就顯示誰。</p>
+    <div class="dl-buttons">
+      <a href="/downloads/My-Playlist-mac-apple-silicon.zip" download>
+        <span class="big">Apple Silicon</span>
+        <span class="small">M1 / M2 / M3 / M4</span>
+      </a>
+      <a href="/downloads/My-Playlist-mac-intel.zip" download>
+        <span class="big">Intel</span>
+        <span class="small">2020 以前的 Mac</span>
+      </a>
+    </div>
+    <p class="req">需要 macOS・免費・不用註冊任何帳號</p>
+  </section>
+
+  <section class="steps">
+    <h3>安裝三步驟</h3>
+    <ol>
+      <li><b class="n">1</b><span>解壓縮下載的檔案，把 <strong>My Playlist</strong> 拖進「應用程式」資料夾</span></li>
+      <li><b class="n">2</b><span>第一次打開請在圖示上<strong>按右鍵 → 打開 → 打開</strong>（這是獨立開發者的小作品，還沒有 Apple 的付費簽名，macOS 會先攔一次，之後就不會再問）</span></li>
+      <li><b class="n">3</b><span>跳出「想要控制 Music／Spotify」的視窗時按<strong>「好」</strong>——這是它讀取正在播放歌曲的唯一權限。接著播首歌，CD 就會插進卡片開始轉 🎧</span></li>
+    </ol>
+  </section>
+
+  <footer>
+    A side project by Molly<br>
+    點 CD 播放／暫停・拖卡片移動・右下角弧線縮放大小・深淺色跟隨系統
+  </footer>
+
+<script>
+(() => {
+  // ── Demo 歌單：真實歌曲，封面與長度用 iTunes Search API 抓 ──
+  const tracks = [
+    { q: "Fujii Kaze Shinunoga E-Wa",   artist: "Fujii Kaze", title: "死ぬのがいいわ", dur: 185,
+      art: "linear-gradient(160deg,#2b2f55 0%,#4a3d78 45%,#8a4d8f 78%,#d9788f 100%)" },
+    { q: "NewJeans Ditto",              artist: "NewJeans", title: "Ditto", dur: 187,
+      art: "linear-gradient(200deg,#f0e5d2 0%,#c9d8cf 40%,#5e8f8a 78%,#2f5a5c 100%)" },
+    { q: "Norah Jones Don't Know Why",  artist: "Norah Jones", title: "Don't Know Why", dur: 186,
+      art: "linear-gradient(150deg,#15241a 0%,#2e5230 45%,#6f9440 75%,#d8c94f 100%)" }
+  ];
+
+  const $ = id => document.getElementById(id);
+  const player = $("player");
+  let idx = 0, cur = 0, playing = false, timer = null, switching = false;
+
+  const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`;
+
+  async function hydrate(){
+    await Promise.all(tracks.map(async t => {
+      try{
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(t.q)}&media=music&entity=song&limit=1&country=tw`);
+        const hit = (await res.json()).results[0];
+        if (!hit) return;
+        t.dur = Math.round(hit.trackTimeMillis / 1000);
+        t.img = hit.artworkUrl100.replace("100x100", "600x600");
+        await new Promise(ok => { const im = new Image(); im.onload = im.onerror = ok; im.src = t.img; });
+      }catch(e){}
+    }));
+    applyArt(tracks[idx]);
+    render();
+  }
+
+  function applyArt(t){
+    const art = t.img ? `url("${t.img}") center / cover no-repeat` : t.art;
+    $("discFace").style.background = art;
+    $("cover").style.background = art;
+    $("artist").textContent = t.artist;
+    $("title").textContent = t.title;
+    $("coverArtist").textContent = t.title;
+    $("coverTitle").textContent = t.artist;
+    $("dur").textContent = fmt(t.dur);
+  }
+
+  function render(){
+    $("cur").textContent = fmt(cur);
+    $("barFill").style.width = (cur / tracks[idx].dur * 100) + "%";
+  }
+
+  function tick(){
+    cur += 0.25;
+    if (cur >= tracks[idx].dur) { change(1); return; }
+    render();
+  }
+
+  function setPlaying(on){
+    playing = on;
+    player.classList.toggle("paused", !on);
+    clearInterval(timer);
+    if (on) timer = setInterval(tick, 250);
+    $("playIcon").innerHTML = on
+      ? '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>'
+      : '<polygon points="7 4 20 12 7 20"/>';
+  }
+
+  function change(step){
+    if (switching) return;
+    switching = true;
+    clearInterval(timer);
+    player.classList.add("eject");
+    setTimeout(() => {
+      idx = (idx + step + tracks.length) % tracks.length;
+      cur = 0;
+      applyArt(tracks[idx]);
+      render();
+      player.classList.remove("eject");
+      setTimeout(() => {
+        switching = false;
+        if (playing) timer = setInterval(tick, 250);
+      }, 650);
+    }, 660);
+  }
+
+  // hover 離開時讓 CD 從正面重新開始轉（快速掃過不歸零）
+  let hoverAt = 0;
+  player.addEventListener("mouseenter", () => { hoverAt = performance.now(); });
+  player.addEventListener("mouseleave", () => {
+    if (performance.now() - hoverAt < 350) return;
+    const f = $("discFace");
+    f.style.animation = "none";
+    void f.offsetWidth;
+    f.style.animation = "";
+  });
+
+  $("toggle").addEventListener("click", () => setPlaying(!playing));
+  $("next").addEventListener("click", () => change(1));
+  $("prev").addEventListener("click", () => change(-1));
+  $("disc").addEventListener("click", () => setPlaying(!playing));
+
+  // 手機：demo 等比縮小
+  function fitStage(){
+    const s = Math.min(1, (window.innerWidth - 24) / 520);
+    $("stage").style.transform = `scale(${s})`;
+    $("stage").style.marginBottom = s < 1 ? `${(s - 1) * 640}px` : "0";
+  }
+  window.addEventListener("resize", fitStage);
+  fitStage();
+
+  // 開場：插入第一張 CD
+  applyArt(tracks[0]);
+  hydrate();
+  cur = 75; render();
+  player.classList.add("eject");
+  void player.offsetWidth;
+  setTimeout(() => {
+    player.classList.remove("eject");
+    setTimeout(() => setPlaying(true), 700);
+  }, 80);
+})();
+</script>
+</body>
+</html>

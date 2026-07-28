@@ -3,3 +3,4 @@ debug.log
 dist/
 build/icon.iconset/
 build/icon.svg.png
+site/downloads/*.zip

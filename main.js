@@ -10,17 +10,32 @@ const path = require("path");
 let win = null;
 let lastId = null;
 
-// ── AppleScript：讀取正在播放的資訊（一行一個欄位） ──
-const NOW_SCRIPT = `
-tell application "Music"
-  set ps to player state
-  if ps is playing or ps is paused then
-    set t to current track
-    return (ps as text) & linefeed & (name of t) & linefeed & (artist of t) & linefeed & (player position as text) & linefeed & (duration of t as text) & linefeed & (persistent ID of t)
-  else
-    return "stopped"
-  end if
-end tell`;
+// ── AppleScript：讀取正在播放的資訊（一行一個欄位）──
+// 「is running」防護：避免 tell 到沒開的 App 把它整個叫起來
+const MUSIC_SCRIPT = `
+if application "Music" is running then
+  tell application "Music"
+    set ps to player state
+    if ps is playing or ps is paused then
+      set t to current track
+      return (ps as text) & linefeed & (name of t) & linefeed & (artist of t) & linefeed & (player position as text) & linefeed & (duration of t as text) & linefeed & (persistent ID of t)
+    end if
+  end tell
+end if
+return "stopped"`;
+
+// Spotify 的接口幾乎同構：duration 是毫秒、封面直接給網址
+const SPOTIFY_SCRIPT = `
+if application "Spotify" is running then
+  tell application "Spotify"
+    set ps to player state
+    if ps is playing or ps is paused then
+      set t to current track
+      return (ps as text) & linefeed & (name of t) & linefeed & (artist of t) & linefeed & (player position as text) & linefeed & (((duration of t) / 1000) as text) & linefeed & (id of t) & linefeed & (artwork url of t)
+    end if
+  end tell
+end if
+return "stopped"`;
 
 // ── AppleScript：把目前這首的封面存成圖檔 ──
 function artScript(filePath) {
@@ -55,53 +70,101 @@ function osa(script) {
   });
 }
 
+function parseNow(out, src) {
+  if (!out || out === "stopped") return null;
+  const parts = out.split("\n");
+  if (parts.length < 6) return null;
+  const [state, name, artist, pos, dur, id, artUrl] = parts;
+  return { state, name, artist, pos: parseFloat(pos), dur: parseFloat(dur), id, artUrl: artUrl || null, src };
+}
+
+// 下載 Spotify 封面（https，跟一層轉址）
+function download(url, dest) {
+  return new Promise((resolve) => {
+    const get = (u, hops) => {
+      if (hops > 2) return resolve(false);
+      require("https").get(u, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          return get(res.headers.location, hops + 1);
+        }
+        if (res.statusCode !== 200) { res.resume(); return resolve(false); }
+        const ws = fs.createWriteStream(dest);
+        res.pipe(ws);
+        ws.on("finish", () => ws.close(() => resolve(true)));
+        ws.on("error", () => resolve(false));
+      }).on("error", () => resolve(false));
+    };
+    get(url, 0);
+  });
+}
+
+const hasSpotify = () => fs.existsSync("/Applications/Spotify.app");
+let lastSrc = null;
+
 async function poll() {
   if (!win) return;
-  const out = await osa(NOW_SCRIPT);
+  const m = parseNow(await osa(MUSIC_SCRIPT), "music");
+  const s = hasSpotify() ? parseNow(await osa(SPOTIFY_SCRIPT), "spotify") : null;
 
-  if (!out || out === "stopped") {
+  // 誰在播誰上場；兩邊都有聲音（或都暫停）時，跟著上一次的來源避免跳動
+  const candidates = [m, s].filter(Boolean);
+  const playing = candidates.filter((c) => c.state === "playing");
+  const paused = candidates.filter((c) => c.state === "paused");
+  const pick = (arr) => arr.find((c) => c.src === lastSrc) || arr[0];
+  const cur = playing.length ? pick(playing) : paused.length ? pick(paused) : null;
+
+  if (!cur) {
+    lastSrc = null;
     win.webContents.send("now-playing", { state: "stopped" });
     return;
   }
+  lastSrc = cur.src;
 
-  const [state, name, artist, pos, dur, id] = out.split("\n");
-  const artFile = path.join(os.tmpdir(), `my-playlist-art-${id}.png`);
+  // 封面：Music 用 raw data 抽檔、Spotify 下載網址圖；一律轉 data URL（canvas 取色需要）
+  const key = (cur.src + "-" + cur.id).replace(/[^A-Za-z0-9_-]/g, "");
+  const artFile = path.join(os.tmpdir(), `my-playlist-art-${key}.png`);
 
-  if (id !== lastId) {
-    if (!fs.existsSync(artFile)) await osa(artScript(artFile));
-    lastId = id;
+  if (cur.id !== lastId) {
+    if (!fs.existsSync(artFile)) {
+      if (cur.src === "music") await osa(artScript(artFile));
+      else if (cur.artUrl) await download(cur.artUrl, artFile);
+    }
+    lastId = cur.id;
   }
 
-  // 封面用 data URL 傳（取色的 canvas 讀 file:// 會被安全限制擋）
   let art = null;
-  if (artCache.has(id)) {
-    art = artCache.get(id);
+  if (artCache.has(key)) {
+    art = artCache.get(key);
   } else if (fs.existsSync(artFile)) {
     art = "data:image/png;base64," + fs.readFileSync(artFile).toString("base64");
-    artCache.set(id, art);
+    artCache.set(key, art);
     if (artCache.size > 20) artCache.delete(artCache.keys().next().value);
   }
 
   win.webContents.send("now-playing", {
-    state,
-    name,
-    artist,
-    pos: parseFloat(pos),
-    dur: parseFloat(dur),
-    id,
+    state: cur.state,
+    name: cur.name,
+    artist: cur.artist,
+    pos: cur.pos,
+    dur: cur.dur,
+    id: cur.id,
+    src: cur.src,
     art,
   });
 }
 const artCache = new Map();
 
-// ── 播放控制（白名單指令） ──
+// ── 播放控制（白名單指令；送往目前上場的來源） ──
 const COMMANDS = {
   playpause: "playpause",
   next: "next track",
   prev: "previous track",
 };
 ipcMain.on("control", (_e, cmd) => {
-  if (COMMANDS[cmd]) osa(`tell application "Music" to ${COMMANDS[cmd]}`);
+  if (!COMMANDS[cmd]) return;
+  const target = lastSrc === "spotify" ? "Spotify" : "Music";
+  osa(`tell application "${target}" to ${COMMANDS[cmd]}`);
 });
 
 // ── 右下角把手縮放：鎖比例、限制範圍 ──
