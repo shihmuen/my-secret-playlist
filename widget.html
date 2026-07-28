@@ -7,8 +7,8 @@
   :root{
     --s:0.72;                          /* 縮放比例：由 JS 依視窗大小即時計算（基準寬 528 = 380/0.72） */
     /* ── 淺色玻璃 ── */
-    --card-hi:rgba(255,255,255,.58);
-    --card-lo:rgba(233,233,232,.52);
+    --card-hi:rgba(255,255,255,.42);
+    --card-lo:rgba(238,238,237,.36);
     --card-edge:rgba(255,255,255,.65);
     --ink:#1c1c1e;
     --ink-soft:rgba(60,60,67,.55);
@@ -23,8 +23,8 @@
   @media (prefers-color-scheme: dark){
     :root{
       /* ── 深色玻璃 ── */
-      --card-hi:rgba(50,50,53,.60);
-      --card-lo:rgba(28,28,30,.62);
+      --card-hi:rgba(46,46,49,.50);
+      --card-lo:rgba(24,24,26,.55);
       --card-edge:rgba(255,255,255,.14);
       --ink:#f5f5f7;
       --ink-soft:rgba(235,235,245,.55);
@@ -40,7 +40,6 @@
     display:flex;align-items:center;justify-content:center;
     -webkit-font-smoothing:antialiased;
     overflow:hidden;
-    -webkit-app-region:drag;          /* 整個視窗可拖曳移動 */
     user-select:none;
   }
 
@@ -48,6 +47,8 @@
     position:relative;
     width:var(--card-size);height:var(--card-size);
     border-radius:var(--card-radius);
+    /* 拖曳區＝卡片本身；視窗邊緣留給系統的縮放把手（整窗設 drag 會蓋掉縮放） */
+    -webkit-app-region:drag;
     background:linear-gradient(180deg,var(--card-hi) 0%,var(--card-lo) 100%);
     box-shadow:
       0 22px 44px -14px rgba(0,0,0,.28),
@@ -56,6 +57,16 @@
   }
 
   .clip{position:absolute;inset:0;border-radius:inherit;overflow:hidden;}
+
+  /* ── 假毛玻璃：桌布圖模糊後依視窗位置對位，透出來像真的玻璃 ── */
+  .wall{
+    position:absolute;left:0;top:0;
+    background-size:cover;background-position:center;
+    filter:blur(46px) saturate(150%);
+    transform-origin:0 0;
+    will-change:transform;
+    pointer-events:none;
+  }
 
   .disc{
     position:absolute;left:50%;top:0;
@@ -186,6 +197,7 @@
 
   <div class="player paused eject empty" id="player">
     <div class="clip">
+      <div class="wall" id="wall"></div>
       <div class="disc" id="disc" title="點一下：播放／暫停">
         <div class="disc-face" id="discFace"></div>
       </div>
@@ -286,6 +298,20 @@
   }, 250);
 
   $("disc").addEventListener("click", () => window.mp.control("playpause"));
+
+  // ── 假毛玻璃：主程序送來桌布路徑與視窗座標，把模糊桌布對位到卡片後面 ──
+  if (window.mp.onGlass) window.mp.onGlass(g => {
+    const wall = $("wall");
+    wall.style.width = g.dw + "px";
+    wall.style.height = g.dh + "px";
+    if (wall.dataset.p !== g.path){
+      wall.style.backgroundImage = `url("file://${g.path}")`;
+      wall.dataset.p = g.path;
+    }
+    const cardL = (window.innerWidth - player.offsetWidth) / 2;
+    const cardT = (window.innerHeight - player.offsetHeight) / 2;
+    wall.style.transform = `translate(${-(g.wx + cardL)}px, ${-(g.wy + cardT)}px)`;
+  });
 })();
 </script>
 </body>

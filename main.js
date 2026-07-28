@@ -1,7 +1,7 @@
 // My Playlist — Electron 主程序
 // 職責：開一個無邊框透明小視窗 + 每秒用 AppleScript 問 Music App 播放狀態
 
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, screen } = require("electron");
 const { execFile } = require("child_process");
 const fs = require("fs");
 const os = require("os");
@@ -88,6 +88,40 @@ async function poll() {
   });
 }
 
+// ── 假毛玻璃：抓桌布圖，連同視窗座標送給畫面對位 ──
+const WALL_SCRIPT = `tell application "System Events" to get picture of current desktop`;
+let wallPath = null;
+let wallSrcKey = null;
+
+async function fetchWallpaper() {
+  let p = await osa(WALL_SCRIPT);
+  if (!p) return;
+  p = p.trim();
+  let key;
+  try { key = p + ":" + fs.statSync(p).mtimeMs; } catch (e) { return; }
+  if (key === wallSrcKey) return;   // 桌布沒換就不重做
+  // 原圖可能超大（百 MB 級）或 HEIC；統一縮成 1600px JPEG（模糊用，細節無感）
+  const out = path.join(os.tmpdir(), "my-playlist-wall.jpg");
+  await new Promise((r) => execFile("sips", ["-s", "format", "jpeg", "-Z", "1600", p, "--out", out], () => r()));
+  if (!fs.existsSync(out)) return;
+  wallSrcKey = key;
+  wallPath = out;
+  sendGlass();
+}
+
+function sendGlass() {
+  if (!win || !wallPath) return;
+  const b = win.getBounds();
+  const d = screen.getDisplayMatching(b);
+  win.webContents.send("glass", {
+    path: wallPath,
+    dw: d.bounds.width,
+    dh: d.bounds.height,
+    wx: b.x - d.bounds.x,
+    wy: b.y - d.bounds.y,
+  });
+}
+
 // ── 播放控制（白名單指令） ──
 const COMMANDS = {
   playpause: "playpause",
@@ -136,6 +170,9 @@ function createWindow() {
   });
   win.setAspectRatio(ASPECT);     // 鎖定比例，縮放不變形
   win.loadFile("widget.html");
+  win.webContents.on("did-finish-load", sendGlass);
+  win.on("move", sendGlass);      // 拖曳中即時對位模糊桌布
+  win.on("resize", sendGlass);
   win.on("moved", saveBounds);
   win.on("resized", saveBounds);
   win.on("closed", () => (win = null));
@@ -145,6 +182,8 @@ app.whenReady().then(() => {
   createWindow();
   poll();
   setInterval(poll, 1000);
+  fetchWallpaper();
+  setInterval(fetchWallpaper, 60000);   // 桌布換了最慢一分鐘內跟上
 });
 
 app.on("window-all-closed", () => app.quit());
