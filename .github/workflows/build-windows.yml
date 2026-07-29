@@ -1,0 +1,36 @@
+name: build-windows
+
+# 手動觸發：在 GitHub 免費的 Windows 雲端機器上打包，成品直接掛上 Release
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "要掛上的 Release tag"
+        required: true
+        default: "v0.1.0"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Package for Windows x64
+        run: npx electron-packager . "My Playlist" --platform=win32 --arch=x64 --icon=build/icon.ico --out=dist --overwrite
+
+      - name: Zip
+        run: Compress-Archive -Path "dist/My Playlist-win32-x64" -DestinationPath "My-Playlist-windows-x64.zip"
+
+      - name: Upload to release
+        run: gh release upload ${{ github.event.inputs.release_tag }} My-Playlist-windows-x64.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

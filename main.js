@@ -2,7 +2,9 @@
 // 職責：開一個無邊框透明小視窗 + 每秒用 AppleScript 問 Music App 播放狀態
 
 const { app, BrowserWindow, ipcMain } = require("electron");
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
+
+const isWin = process.platform === "win32";
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -155,7 +157,64 @@ async function poll() {
 }
 const artCache = new Map();
 
-// ── 播放控制（白名單指令；送往目前上場的來源） ──
+// ── Windows 資料來源：長駐 PowerShell 讀系統媒體佈告欄（SMTC），一行一筆 JSON ──
+let winProc = null;
+
+function startWinSource() {
+  winProc = spawn(
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(__dirname, "smtc.ps1")],
+    { stdio: ["ignore", "pipe", "pipe"], windowsHide: true }
+  );
+  let buf = "";
+  winProc.stdout.on("data", (d) => {
+    buf += d.toString("utf8");
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!line) continue;
+      try { handleWinNow(JSON.parse(line)); } catch (e) {}
+    }
+  });
+  winProc.stderr.on("data", (d) =>
+    fs.appendFile(LOG(), `[${new Date().toISOString()}] smtc: ${d.toString().trim()}\n`, () => {})
+  );
+  winProc.on("exit", () => {
+    winProc = null;
+    setTimeout(startWinSource, 3000);   // 意外死掉就重啟
+  });
+}
+
+function handleWinNow(j) {
+  if (!win) return;
+  if (j.state === "stopped") {
+    win.webContents.send("now-playing", { state: "stopped" });
+    return;
+  }
+  let art = null;
+  if (j.art) {
+    if (artCache.has(j.id)) {
+      art = artCache.get(j.id);
+    } else if (fs.existsSync(j.art)) {
+      art = "data:image/jpeg;base64," + fs.readFileSync(j.art).toString("base64");
+      artCache.set(j.id, art);
+      if (artCache.size > 20) artCache.delete(artCache.keys().next().value);
+    }
+  }
+  win.webContents.send("now-playing", {
+    state: j.state,
+    name: j.title,
+    artist: j.artist,
+    pos: j.pos,
+    dur: j.dur,
+    id: j.id,
+    src: "smtc",
+    art,
+  });
+}
+
+// ── 播放控制（白名單指令；依平台與目前來源路由） ──
 const COMMANDS = {
   playpause: "playpause",
   next: "next track",
@@ -163,6 +222,15 @@ const COMMANDS = {
 };
 ipcMain.on("control", (_e, cmd) => {
   if (!COMMANDS[cmd]) return;
+  if (isWin) {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(__dirname, "smtc-cmd.ps1"), cmd],
+      { timeout: 8000, windowsHide: true },
+      () => {}
+    );
+    return;
+  }
   const target = lastSrc === "spotify" ? "Spotify" : "Music";
   osa(`tell application "${target}" to ${COMMANDS[cmd]}`);
 });
@@ -221,8 +289,12 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
-  poll();
-  setInterval(poll, 1000);
+  if (isWin) {
+    startWinSource();
+  } else {
+    poll();
+    setInterval(poll, 1000);
+  }
 });
 
 app.on("window-all-closed", () => app.quit());
