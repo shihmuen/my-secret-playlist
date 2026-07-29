@@ -1,7 +1,7 @@
 // My Playlist — Electron 主程序
 // 職責：開一個無邊框透明小視窗 + 每秒用 AppleScript 問 Music App 播放狀態
 
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const { execFile, spawn } = require("child_process");
 
 const isWin = process.platform === "win32";
@@ -287,6 +287,43 @@ function createWindow() {
   win.on("closed", () => (win = null));
 }
 
+// ── 新版本提醒：定期問 GitHub 最新 Release，比自己新就通知畫面 ──
+const SITE_URL = "https://my-secret-playlist.vercel.app";
+
+function isNewer(a, b) {
+  const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+}
+
+function checkUpdate() {
+  const req = require("https").get(
+    {
+      hostname: "api.github.com",
+      path: "/repos/shihmuen/my-secret-playlist/releases/latest",
+      headers: { "User-Agent": "my-playlist", Accept: "application/vnd.github+json" },
+    },
+    (res) => {
+      let s = "";
+      res.on("data", (d) => (s += d));
+      res.on("end", () => {
+        try {
+          const tag = (JSON.parse(s).tag_name || "").replace(/^v/, "");
+          if (tag && isNewer(tag, app.getVersion()) && win) {
+            win.webContents.send("update-available", tag);
+          }
+        } catch (e) {}
+      });
+    }
+  );
+  req.on("error", () => {});
+}
+
+ipcMain.on("open-download", () => shell.openExternal(SITE_URL));
+
 app.whenReady().then(() => {
   createWindow();
   if (isWin) {
@@ -295,6 +332,8 @@ app.whenReady().then(() => {
     poll();
     setInterval(poll, 1000);
   }
+  setTimeout(checkUpdate, 5000);              // 開機後五秒查一次
+  setInterval(checkUpdate, 6 * 3600 * 1000);  // 之後每六小時
 });
 
 app.on("window-all-closed", () => app.quit());

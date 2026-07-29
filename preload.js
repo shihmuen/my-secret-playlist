@@ -5,4 +5,6 @@ contextBridge.exposeInMainWorld("mp", {
   control: (cmd) => ipcRenderer.send("control", cmd),
   resizeTo: (w) => ipcRenderer.send("resize-to", w),
   resizeEnd: () => ipcRenderer.send("resize-end"),
+  onUpdate: (cb) => ipcRenderer.on("update-available", (_e, v) => cb(v)),
+  openDownload: () => ipcRenderer.send("open-download"),
 });
