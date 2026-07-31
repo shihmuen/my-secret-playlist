@@ -382,23 +382,26 @@
   }
 
   // ── 換片編舞「直上直下」：鬆脫→拿起→空拍→放下→吸入（雙層交棒） ──
+  //
+  // 註：碟片飛出視窗上緣時會被切（切線 dy = 222*scale - 82）。試過「邊飛邊縮小」與
+  //     「碰線前淡出」兩種避切法，Molly 都不喜歡，決定接受切口、保留原本的飛行距離。
   const T = (e) => `translate(-50%,-50%) ${e}`;
   function choreo(){
     const s = window.innerWidth / 528;
     return {
       eject: { kf:[{transform:T("translateY(0) scale(1)")},{transform:T(`translateY(${210*s}px) scale(.92)`)}],
-               opt:{duration:330, easing:"cubic-bezier(.3,.6,.3,1)"} },
+               opt:{duration:260, easing:"cubic-bezier(.3,.6,.3,1)"} },
       lift:  { kf:[{transform:T(`translateY(${210*s}px) scale(.92)`), opacity:1},
-                   {transform:T(`translateY(${-140*s}px) scale(.92)`), opacity:1, offset:.62},
-                   {transform:T(`translateY(${-520*s}px) scale(.92)`), opacity:0}],
-               opt:{duration:520, easing:"cubic-bezier(.5,.05,.75,.4)"} },
-      pause: 260,
-      lower: { kf:[{transform:T(`translateY(${-520*s}px) scale(.92)`), opacity:0},
-                   {transform:T(`translateY(${-380*s}px) scale(.92)`), opacity:1, offset:.18},
+                   {transform:T(`translateY(${-80*s}px) scale(.92)`), opacity:1, offset:.6},
+                   {transform:T(`translateY(${-290*s}px) scale(.92)`), opacity:0}],
+               opt:{duration:310, easing:"cubic-bezier(.5,.05,.75,.4)"} },
+      pause: 150,
+      lower: { kf:[{transform:T(`translateY(${-290*s}px) scale(.92)`), opacity:0},
+                   {transform:T(`translateY(${-210*s}px) scale(.92)`), opacity:1, offset:.18},
                    {transform:T(`translateY(${210*s}px) scale(.92)`), opacity:1}],
-               opt:{duration:500, easing:"cubic-bezier(.2,.7,.25,1)"} },
+               opt:{duration:310, easing:"cubic-bezier(.2,.7,.25,1)"} },
       tuck:  { kf:[{transform:T(`translateY(${210*s}px) scale(.92)`)},{transform:T("translateY(0) scale(1)")}],
-               opt:{duration:380, easing:"cubic-bezier(.25,.8,.3,1)"} },
+               opt:{duration:300, easing:"cubic-bezier(.25,.8,.3,1)"} },
     };
   }
 
