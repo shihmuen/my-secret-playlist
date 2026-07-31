@@ -405,8 +405,11 @@
   // 動畫保險：視窗被遮住時 WAAPI 可能停擺，逾時就跳到終點繼續下一拍
   // ⚠️ 動畫自然結束時必須清掉這個計時器：對「已被 cancel 的動畫」呼叫 finish()
   //    會讓它復活並重套 fill:forwards 的終點畫面（碟片會跳回中央）
+  let swapAnims = [];   // 自己記住每一段動畫：被瀏覽器「自動回收」的動畫不會出現在
+                        // getAnimations()，但取消它的覆蓋者時會復活並重套終點畫面
   function run(el, kf, opt){
     const a = el.animate(kf, { ...opt, fill: "forwards" });
+    swapAnims.push(a);
     return new Promise(resolve => {
       let settled = false;
       const done = () => { if (settled) return; settled = true; clearTimeout(timer); resolve(); };
@@ -423,6 +426,8 @@
   function resetSwap(){
     swapGen++;
     const discEl = $("disc"), discAir = $("discAir"), hubEl = $("hub");
+    swapAnims.forEach(a => { try { a.cancel(); } catch (e) {} });   // 含已被回收的
+    swapAnims = [];
     discEl.getAnimations().forEach(a => a.cancel());
     discAir.getAnimations().forEach(a => a.cancel());
     discAir.hidden = true;
