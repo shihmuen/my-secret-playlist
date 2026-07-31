@@ -402,18 +402,42 @@
     };
   }
 
+  // 動畫保險：視窗被遮住時 WAAPI 可能停擺，逾時就跳到終點繼續下一拍
+  function run(el, kf, opt){
+    const a = el.animate(kf, { ...opt, fill: "forwards" });
+    return Promise.race([
+      a.finished.catch(() => {}),
+      new Promise(r => setTimeout(() => { try { a.finish(); } catch (e) {} r(); }, opt.duration + 600)),
+    ]);
+  }
+
+  function resetSwap(){
+    const discEl = $("disc"), discAir = $("discAir"), hubEl = $("hub");
+    discEl.getAnimations().forEach(a => a.cancel());
+    discAir.getAnimations().forEach(a => a.cancel());
+    discAir.hidden = true;
+    discEl.style.visibility = "";
+    hubEl.style.opacity = "";
+    info.style.opacity = "";
+    info.style.transform = "";
+    player.classList.remove("switching");
+    switching = false;
+  }
+
   async function swapDisc(d){
     switching = true;
     player.classList.add("switching");
     const discEl = $("disc"), discAir = $("discAir"), faceAir = $("discFaceAir"), hubEl = $("hub");
     const c = choreo();
+    // 看門狗：整套動作最多 6 秒，逾時強制復位（避免卡在半途）
+    const watchdog = setTimeout(() => { applyArt(d); resetSwap(); }, 6000);
     try {
       hubEl.style.opacity = "0";
       info.style.opacity = "0";
       info.style.transform = "translateY(8px)";
 
       // 1 鬆脫：滑到面板中央
-      await discEl.animate(c.eject.kf, { ...c.eject.opt, fill: "forwards" }).finished;
+      await run(discEl, c.eject.kf, c.eject.opt);
 
       // 交棒給 air 層（帶著舊封面）
       faceAir.style.background = $("discFace").style.background;
@@ -421,7 +445,7 @@
       discAir.hidden = false;
 
       // 2 拿起：垂直帶走
-      await discAir.animate(c.lift.kf, { ...c.lift.opt, fill: "forwards" }).finished;
+      await run(discAir, c.lift.kf, c.lift.opt);
 
       // 3 空手一拍
       await new Promise(r => setTimeout(r, c.pause));
@@ -429,7 +453,7 @@
       // 4 放下：新片垂直降落
       applyArt(d);
       faceAir.style.background = $("discFace").style.background;
-      await discAir.animate(c.lower.kf, { ...c.lower.opt, fill: "forwards" }).finished;
+      await run(discAir, c.lower.kf, c.lower.opt);
 
       // 交棒回 slot 層；新片從正面開始轉
       discAir.hidden = true;
@@ -438,23 +462,15 @@
       discEl.style.visibility = "";
 
       // 5 吸入：套回軸心
-      const tuck = discEl.animate(c.tuck.kf, { ...c.tuck.opt, fill: "forwards" });
       setTimeout(() => {
         info.style.opacity = "";
         info.style.transform = "";
       }, c.tuck.opt.duration * 0.4);
-      await tuck.finished;
+      await run(discEl, c.tuck.kf, c.tuck.opt);
     } finally {
       // 清場：取消 WAAPI，讓 CSS（hover／--dy）接回控制權
-      discEl.getAnimations().forEach(a => a.cancel());
-      discAir.getAnimations().forEach(a => a.cancel());
-      discAir.hidden = true;
-      discEl.style.visibility = "";
-      hubEl.style.opacity = "";
-      info.style.opacity = "";
-      info.style.transform = "";
-      player.classList.remove("switching");
-      switching = false;
+      clearTimeout(watchdog);
+      resetSwap();
     }
   }
   const info = document.querySelector(".info");
@@ -470,6 +486,8 @@
       if (first){
         applyArt(d);
         setTimeout(() => player.classList.remove("eject"), 120);
+      } else if (document.hidden){
+        applyArt(d);          // 沒人在看時直接換，不演動畫（也避免被凍結卡住）
       } else if (!switching){
         swapDisc(d);
       }

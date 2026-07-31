@@ -1,7 +1,7 @@
 {
   "name": "my-playlist",
   "productName": "My Playlist",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "CD-slot music player widget for macOS (Apple Music via Music.app)",
   "main": "main.js",
   "scripts": {

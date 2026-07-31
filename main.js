@@ -278,6 +278,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
+      // widget 常被其他視窗蓋住；不關掉節流的話動畫會被凍結、換片動作卡住
+      backgroundThrottling: false,
     },
   });
   win.setAspectRatio(ASPECT);     // 鎖定比例，縮放不變形

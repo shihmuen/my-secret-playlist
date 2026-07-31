@@ -369,6 +369,28 @@
 
   // 換片編舞「直上直下」：鬆脫→拿起→空拍→放下→吸入
   const TF = (e) => `translate(-50%,-50%) ${e}`;
+  // 動畫保險：分頁被切到背景時 WAAPI 會停擺，逾時就跳到終點繼續
+  function run(el, kf, opt){
+    const a = el.animate(kf, { ...opt, fill: "forwards" });
+    return Promise.race([
+      a.finished.catch(() => {}),
+      new Promise(r => setTimeout(() => { try { a.finish(); } catch (e) {} r(); }, opt.duration + 600)),
+    ]);
+  }
+  function resetSwap(){
+    const discEl = $("disc"), discAir = $("discAir");
+    const hubEl = document.querySelector(".hub");
+    const infoEl = document.querySelector(".info");
+    discEl.getAnimations().forEach(a => a.cancel());
+    discAir.getAnimations().forEach(a => a.cancel());
+    discAir.hidden = true;
+    discEl.style.visibility = "";
+    hubEl.style.opacity = "";
+    infoEl.style.opacity = ""; infoEl.style.transform = "";
+    player.classList.remove("switching");
+    switching = false;
+    if (playing) timer = setInterval(tick, 250);
+  }
   async function change(step){
     if (switching) return;
     switching = true;
@@ -377,22 +399,23 @@
     const discEl = $("disc"), discAir = $("discAir"), faceAir = $("discFaceAir");
     const hubEl = document.querySelector(".hub");
     const infoEl = document.querySelector(".info");
+    const watchdog = setTimeout(resetSwap, 6000);
     try {
       hubEl.style.opacity = "0";
       infoEl.style.opacity = "0"; infoEl.style.transform = "translateY(8px)";
 
-      await discEl.animate(
+      await run(discEl,
         [{transform:TF("translateY(0) scale(1)")},{transform:TF("translateY(210px) scale(.92)")}],
-        {duration:330, easing:"cubic-bezier(.3,.6,.3,1)", fill:"forwards"}).finished;
+        {duration:330, easing:"cubic-bezier(.3,.6,.3,1)"});
 
       faceAir.style.background = $("discFace").style.background;
       discEl.style.visibility = "hidden"; discAir.hidden = false;
 
-      await discAir.animate(
+      await run(discAir,
         [{transform:TF("translateY(210px) scale(.92)"), opacity:1},
          {transform:TF("translateY(-140px) scale(.92)"), opacity:1, offset:.62},
          {transform:TF("translateY(-520px) scale(.92)"), opacity:0}],
-        {duration:520, easing:"cubic-bezier(.5,.05,.75,.4)", fill:"forwards"}).finished;
+        {duration:520, easing:"cubic-bezier(.5,.05,.75,.4)"});
 
       await new Promise(r => setTimeout(r, 260));
 
@@ -402,32 +425,24 @@
       render();
       faceAir.style.background = $("discFace").style.background;
 
-      await discAir.animate(
+      await run(discAir,
         [{transform:TF("translateY(-520px) scale(.92)"), opacity:0},
          {transform:TF("translateY(-380px) scale(.92)"), opacity:1, offset:.18},
          {transform:TF("translateY(210px) scale(.92)"), opacity:1}],
-        {duration:500, easing:"cubic-bezier(.2,.7,.25,1)", fill:"forwards"}).finished;
+        {duration:500, easing:"cubic-bezier(.2,.7,.25,1)"});
 
       discAir.hidden = true;
       const f = $("discFace");
       f.style.animation = "none"; void f.offsetWidth; f.style.animation = "";
       discEl.style.visibility = "";
 
-      const tuck = discEl.animate(
-        [{transform:TF("translateY(210px) scale(.92)")},{transform:TF("translateY(0) scale(1)")}],
-        {duration:380, easing:"cubic-bezier(.25,.8,.3,1)", fill:"forwards"});
       setTimeout(() => { infoEl.style.opacity = ""; infoEl.style.transform = ""; }, 152);
-      await tuck.finished;
+      await run(discEl,
+        [{transform:TF("translateY(210px) scale(.92)")},{transform:TF("translateY(0) scale(1)")}],
+        {duration:380, easing:"cubic-bezier(.25,.8,.3,1)"});
     } finally {
-      discEl.getAnimations().forEach(a => a.cancel());
-      discAir.getAnimations().forEach(a => a.cancel());
-      discAir.hidden = true;
-      discEl.style.visibility = "";
-      hubEl.style.opacity = "";
-      infoEl.style.opacity = ""; infoEl.style.transform = "";
-      player.classList.remove("switching");
-      switching = false;
-      if (playing) timer = setInterval(tick, 250);
+      clearTimeout(watchdog);
+      resetSwap();
     }
   }
 
