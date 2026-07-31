@@ -64,11 +64,26 @@
   }
   .disc-face{
     width:100%;height:100%;border-radius:50%;
+    -webkit-mask:radial-gradient(circle, transparent 0 26px, #000 27px);
+    mask:radial-gradient(circle, transparent 0 26px, #000 27px);
     background:linear-gradient(160deg,#c9c9c8 0%,#b4b4b3 100%);
     background-size:cover;background-position:center;
     animation:spin 9s linear infinite;
     position:relative;overflow:hidden;
   }
+  .disc::after{
+    content:"";position:absolute;left:50%;top:50%;
+    width:124px;height:124px;transform:translate(-50%,-50%);
+    border-radius:50%;
+    background:radial-gradient(circle,
+      rgba(255,255,255,0) 0 26px,
+      rgba(255,255,255,.32) 27px 44px,
+      rgba(255,255,255,.12) 45px 58px,
+      rgba(255,255,255,0) 60px);
+    pointer-events:none;
+  }
+  .disc.air{z-index:4;pointer-events:none;}
+  .disc.air[hidden]{display:none;}
   .player.paused .disc-face{animation-play-state:paused;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .disc-face::before{
@@ -109,15 +124,15 @@
   }
   .cover .a{color:#fff;font-size:24px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 2px 10px rgba(0,0,0,.45);}
   .cover .t{color:rgba(255,255,255,.88);font-size:14px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.4);}
-  .player:hover{--dy:210px;}
-  .player:hover .disc{transform:translate(-50%,-50%) translateY(var(--dy)) scale(1.02);}
-  .player:hover .cover{
+  .player:not(.switching):hover{--dy:210px;}
+  .player:not(.switching):hover .disc{transform:translate(-50%,-50%) translateY(var(--dy)) scale(1.02);}
+  .player:not(.switching):hover .cover{
     opacity:1;
     clip-path:circle(304px at 50% 50%);
     transition:clip-path .55s cubic-bezier(.32,.72,.28,1), opacity .1s ease;
   }
-  .player:hover .hub{opacity:0;}
-  .player:hover .info{opacity:0;transform:translateY(8px);}
+  .player:not(.switching):hover .hub{opacity:0;}
+  .player:not(.switching):hover .info{opacity:0;transform:translateY(8px);}
   .player.eject{--dy:-300px;}
   .player.eject .hub{opacity:0;}
   .player.eject .disc{filter:drop-shadow(0 4px 10px rgba(0,0,0,.15));}
@@ -223,6 +238,9 @@
           <div class="a" id="coverArtist"></div>
           <div class="t" id="coverTitle"></div>
         </div>
+      </div>
+      <div class="disc air" id="discAir" hidden>
+        <div class="disc-face" id="discFaceAir"></div>
       </div>
       <div class="info">
         <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
@@ -349,22 +367,68 @@
       : '<polygon points="7 4 20 12 7 20"/>';
   }
 
-  function change(step){
+  // 換片編舞「直上直下」：鬆脫→拿起→空拍→放下→吸入
+  const TF = (e) => `translate(-50%,-50%) ${e}`;
+  async function change(step){
     if (switching) return;
     switching = true;
+    player.classList.add("switching");
     clearInterval(timer);
-    player.classList.add("eject");
-    setTimeout(() => {
+    const discEl = $("disc"), discAir = $("discAir"), faceAir = $("discFaceAir");
+    const hubEl = document.querySelector(".hub");
+    const infoEl = document.querySelector(".info");
+    try {
+      hubEl.style.opacity = "0";
+      infoEl.style.opacity = "0"; infoEl.style.transform = "translateY(8px)";
+
+      await discEl.animate(
+        [{transform:TF("translateY(0) scale(1)")},{transform:TF("translateY(210px) scale(.92)")}],
+        {duration:330, easing:"cubic-bezier(.3,.6,.3,1)", fill:"forwards"}).finished;
+
+      faceAir.style.background = $("discFace").style.background;
+      discEl.style.visibility = "hidden"; discAir.hidden = false;
+
+      await discAir.animate(
+        [{transform:TF("translateY(210px) scale(.92)"), opacity:1},
+         {transform:TF("translateY(-140px) scale(.92)"), opacity:1, offset:.62},
+         {transform:TF("translateY(-520px) scale(.92)"), opacity:0}],
+        {duration:520, easing:"cubic-bezier(.5,.05,.75,.4)", fill:"forwards"}).finished;
+
+      await new Promise(r => setTimeout(r, 260));
+
       idx = (idx + step + tracks.length) % tracks.length;
       cur = 0;
       applyArt(tracks[idx]);
       render();
-      player.classList.remove("eject");
-      setTimeout(() => {
-        switching = false;
-        if (playing) timer = setInterval(tick, 250);
-      }, 650);
-    }, 660);
+      faceAir.style.background = $("discFace").style.background;
+
+      await discAir.animate(
+        [{transform:TF("translateY(-520px) scale(.92)"), opacity:0},
+         {transform:TF("translateY(-380px) scale(.92)"), opacity:1, offset:.18},
+         {transform:TF("translateY(210px) scale(.92)"), opacity:1}],
+        {duration:500, easing:"cubic-bezier(.2,.7,.25,1)", fill:"forwards"}).finished;
+
+      discAir.hidden = true;
+      const f = $("discFace");
+      f.style.animation = "none"; void f.offsetWidth; f.style.animation = "";
+      discEl.style.visibility = "";
+
+      const tuck = discEl.animate(
+        [{transform:TF("translateY(210px) scale(.92)")},{transform:TF("translateY(0) scale(1)")}],
+        {duration:380, easing:"cubic-bezier(.25,.8,.3,1)", fill:"forwards"});
+      setTimeout(() => { infoEl.style.opacity = ""; infoEl.style.transform = ""; }, 152);
+      await tuck.finished;
+    } finally {
+      discEl.getAnimations().forEach(a => a.cancel());
+      discAir.getAnimations().forEach(a => a.cancel());
+      discAir.hidden = true;
+      discEl.style.visibility = "";
+      hubEl.style.opacity = "";
+      infoEl.style.opacity = ""; infoEl.style.transform = "";
+      player.classList.remove("switching");
+      switching = false;
+      if (playing) timer = setInterval(tick, 250);
+    }
   }
 
   // hover 離開時讓 CD 從正面重新開始轉（快速掃過不歸零）

@@ -70,11 +70,29 @@
   }
   .disc-face{
     width:100%;height:100%;border-radius:50%;
+    /* CD 中心真孔：遮罩挖穿，透出背後 */
+    -webkit-mask:radial-gradient(circle, transparent 0 calc(26px * var(--s)), #000 calc(27px * var(--s)));
+    mask:radial-gradient(circle, transparent 0 calc(26px * var(--s)), #000 calc(27px * var(--s)));
     background:linear-gradient(160deg,#c9c9c8 0%,#b4b4b3 100%);
     background-size:cover;background-position:center;
     animation:spin 9s linear infinite;
     position:relative;overflow:hidden;
   }
+  .disc::after{
+    /* CD 中心的透明塑膠環 */
+    content:"";position:absolute;left:50%;top:50%;
+    width:calc(124px * var(--s));height:calc(124px * var(--s));
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    background:radial-gradient(circle,
+      rgba(255,255,255,0) 0 calc(26px * var(--s)),
+      rgba(255,255,255,.32) calc(27px * var(--s)) calc(44px * var(--s)),
+      rgba(255,255,255,.12) calc(45px * var(--s)) calc(58px * var(--s)),
+      rgba(255,255,255,0) calc(60px * var(--s)));
+    pointer-events:none;
+  }
+  .disc.air{z-index:4;pointer-events:none;-webkit-app-region:no-drag;}
+  .disc.air[hidden]{display:none;}
   .player.paused .disc-face{animation-play-state:paused;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .disc-face::before{
@@ -132,17 +150,18 @@
   .cover .t{color:rgba(255,255,255,.88);font-size:calc(14px * var(--s));font-weight:600;letter-spacing:.12em;text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.4);
     opacity:0;transform:translateY(6px);transition:opacity .25s ease, transform .3s ease;}
 
-  .player:not(.empty):hover{--dy:calc(210px * var(--s));}
-  .player:not(.empty):hover .disc{transform:translate(-50%,-50%) translateY(var(--dy)) scale(1.02);}
-  .player:not(.empty):hover .cover{
+  /* 換片進行中（.switching）暫停 hover，避免兩套動畫搶戲 */
+  .player:not(.empty):not(.switching):hover{--dy:calc(210px * var(--s));}
+  .player:not(.empty):not(.switching):hover .disc{transform:translate(-50%,-50%) translateY(var(--dy)) scale(1.02);}
+  .player:not(.empty):not(.switching):hover .cover{
     opacity:1;
     clip-path:circle(calc(304px * var(--s)) at 50% 50%);
     transition:clip-path .55s cubic-bezier(.32,.72,.28,1), opacity .1s ease;
   }
-  .player:not(.empty):hover .cover .a,
-  .player:not(.empty):hover .cover .t{opacity:1;transform:translateY(0);transition-delay:.3s;}
-  .player:not(.empty):hover .hub{opacity:0;}
-  .player:not(.empty):hover .info{opacity:0;transform:translateY(8px);}
+  .player:not(.empty):not(.switching):hover .cover .a,
+  .player:not(.empty):not(.switching):hover .cover .t{opacity:1;transform:translateY(0);transition-delay:.3s;}
+  .player:not(.empty):not(.switching):hover .hub{opacity:0;}
+  .player:not(.empty):not(.switching):hover .info{opacity:0;transform:translateY(8px);}
 
   .player.eject{--dy:calc(-300px * var(--s));}
   .player.eject .hub{opacity:0;}
@@ -223,11 +242,14 @@
       <div class="disc" id="disc" title="點一下：播放／暫停">
         <div class="disc-face" id="discFace"></div>
       </div>
-      <div class="hub"></div>
+      <div class="hub" id="hub"></div>
       <div class="cover" id="cover">
         <div class="a" id="coverTitle"></div>
         <div class="t" id="coverArtist"></div>
       </div>
+    </div>
+    <div class="disc air" id="discAir" hidden>
+      <div class="disc-face" id="discFaceAir"></div>
     </div>
     <div class="info">
       <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
@@ -359,8 +381,86 @@
     themeHS = null; refreshTheme();
   }
 
+  // ── 換片編舞「直上直下」：鬆脫→拿起→空拍→放下→吸入（雙層交棒） ──
+  const T = (e) => `translate(-50%,-50%) ${e}`;
+  function choreo(){
+    const s = window.innerWidth / 528;
+    return {
+      eject: { kf:[{transform:T("translateY(0) scale(1)")},{transform:T(`translateY(${210*s}px) scale(.92)`)}],
+               opt:{duration:330, easing:"cubic-bezier(.3,.6,.3,1)"} },
+      lift:  { kf:[{transform:T(`translateY(${210*s}px) scale(.92)`), opacity:1},
+                   {transform:T(`translateY(${-140*s}px) scale(.92)`), opacity:1, offset:.62},
+                   {transform:T(`translateY(${-520*s}px) scale(.92)`), opacity:0}],
+               opt:{duration:520, easing:"cubic-bezier(.5,.05,.75,.4)"} },
+      pause: 260,
+      lower: { kf:[{transform:T(`translateY(${-520*s}px) scale(.92)`), opacity:0},
+                   {transform:T(`translateY(${-380*s}px) scale(.92)`), opacity:1, offset:.18},
+                   {transform:T(`translateY(${210*s}px) scale(.92)`), opacity:1}],
+               opt:{duration:500, easing:"cubic-bezier(.2,.7,.25,1)"} },
+      tuck:  { kf:[{transform:T(`translateY(${210*s}px) scale(.92)`)},{transform:T("translateY(0) scale(1)")}],
+               opt:{duration:380, easing:"cubic-bezier(.25,.8,.3,1)"} },
+    };
+  }
+
+  async function swapDisc(d){
+    switching = true;
+    player.classList.add("switching");
+    const discEl = $("disc"), discAir = $("discAir"), faceAir = $("discFaceAir"), hubEl = $("hub");
+    const c = choreo();
+    try {
+      hubEl.style.opacity = "0";
+      info.style.opacity = "0";
+      info.style.transform = "translateY(8px)";
+
+      // 1 鬆脫：滑到面板中央
+      await discEl.animate(c.eject.kf, { ...c.eject.opt, fill: "forwards" }).finished;
+
+      // 交棒給 air 層（帶著舊封面）
+      faceAir.style.background = $("discFace").style.background;
+      discEl.style.visibility = "hidden";
+      discAir.hidden = false;
+
+      // 2 拿起：垂直帶走
+      await discAir.animate(c.lift.kf, { ...c.lift.opt, fill: "forwards" }).finished;
+
+      // 3 空手一拍
+      await new Promise(r => setTimeout(r, c.pause));
+
+      // 4 放下：新片垂直降落
+      applyArt(d);
+      faceAir.style.background = $("discFace").style.background;
+      await discAir.animate(c.lower.kf, { ...c.lower.opt, fill: "forwards" }).finished;
+
+      // 交棒回 slot 層；新片從正面開始轉
+      discAir.hidden = true;
+      const f = $("discFace");
+      f.style.animation = "none"; void f.offsetWidth; f.style.animation = "";
+      discEl.style.visibility = "";
+
+      // 5 吸入：套回軸心
+      const tuck = discEl.animate(c.tuck.kf, { ...c.tuck.opt, fill: "forwards" });
+      setTimeout(() => {
+        info.style.opacity = "";
+        info.style.transform = "";
+      }, c.tuck.opt.duration * 0.4);
+      await tuck.finished;
+    } finally {
+      // 清場：取消 WAAPI，讓 CSS（hover／--dy）接回控制權
+      discEl.getAnimations().forEach(a => a.cancel());
+      discAir.getAnimations().forEach(a => a.cancel());
+      discAir.hidden = true;
+      discEl.style.visibility = "";
+      hubEl.style.opacity = "";
+      info.style.opacity = "";
+      info.style.transform = "";
+      player.classList.remove("switching");
+      switching = false;
+    }
+  }
+  const info = document.querySelector(".info");
+
   window.mp.onNowPlaying(d => {
-    if (d.state === "stopped"){ showEmpty(); return; }
+    if (d.state === "stopped"){ if (!switching) showEmpty(); return; }
     player.classList.remove("empty");
     pos = d.pos; dur = d.dur;
 
@@ -371,14 +471,7 @@
         applyArt(d);
         setTimeout(() => player.classList.remove("eject"), 120);
       } else if (!switching){
-        // 換歌：退片 → 換封面 → 插片
-        switching = true;
-        player.classList.add("eject");
-        setTimeout(() => {
-          applyArt(d);
-          player.classList.remove("eject");
-          setTimeout(() => (switching = false), 650);
-        }, 660);
+        swapDisc(d);
       }
     }
     setPlaying(d.state === "playing");

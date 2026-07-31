@@ -4,3 +4,4 @@ dist/
 build/icon.iconset/
 build/icon.svg.png
 site/downloads/*.zip
+preview-swap.html
