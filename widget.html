@@ -403,15 +403,25 @@
   }
 
   // 動畫保險：視窗被遮住時 WAAPI 可能停擺，逾時就跳到終點繼續下一拍
+  // ⚠️ 動畫自然結束時必須清掉這個計時器：對「已被 cancel 的動畫」呼叫 finish()
+  //    會讓它復活並重套 fill:forwards 的終點畫面（碟片會跳回中央）
   function run(el, kf, opt){
     const a = el.animate(kf, { ...opt, fill: "forwards" });
-    return Promise.race([
-      a.finished.catch(() => {}),
-      new Promise(r => setTimeout(() => { try { a.finish(); } catch (e) {} r(); }, opt.duration + 600)),
-    ]);
+    return new Promise(resolve => {
+      let settled = false;
+      const done = () => { if (settled) return; settled = true; clearTimeout(timer); resolve(); };
+      const timer = setTimeout(() => {
+        if (a.playState !== "idle") { try { a.finish(); } catch (e) {} }  // 已取消的不再碰
+        done();
+      }, opt.duration + 600);
+      a.finished.then(done, done);
+    });
   }
 
+  let swapGen = 0;   // 世代編號：復位後讓仍在跑的舊序列自動作廢
+
   function resetSwap(){
+    swapGen++;
     const discEl = $("disc"), discAir = $("discAir"), hubEl = $("hub");
     discEl.getAnimations().forEach(a => a.cancel());
     discAir.getAnimations().forEach(a => a.cancel());
@@ -427,6 +437,8 @@
   async function swapDisc(d){
     switching = true;
     player.classList.add("switching");
+    const gen = ++swapGen;
+    const alive = () => gen === swapGen;
     const discEl = $("disc"), discAir = $("discAir"), faceAir = $("discFaceAir"), hubEl = $("hub");
     const c = choreo();
     // 看門狗：整套動作最多 6 秒，逾時強制復位（避免卡在半途）
@@ -438,6 +450,7 @@
 
       // 1 鬆脫：滑到面板中央
       await run(discEl, c.eject.kf, c.eject.opt);
+      if (!alive()) return;
 
       // 交棒給 air 層（帶著舊封面）
       faceAir.style.background = $("discFace").style.background;
@@ -446,14 +459,17 @@
 
       // 2 拿起：垂直帶走
       await run(discAir, c.lift.kf, c.lift.opt);
+      if (!alive()) return;
 
       // 3 空手一拍
       await new Promise(r => setTimeout(r, c.pause));
+      if (!alive()) return;
 
       // 4 放下：新片垂直降落
       applyArt(d);
       faceAir.style.background = $("discFace").style.background;
       await run(discAir, c.lower.kf, c.lower.opt);
+      if (!alive()) return;
 
       // 交棒回 slot 層；新片從正面開始轉
       discAir.hidden = true;
@@ -462,11 +478,12 @@
       discEl.style.visibility = "";
 
       // 5 吸入：套回軸心
-      setTimeout(() => {
+      const infoBack = setTimeout(() => {
         info.style.opacity = "";
         info.style.transform = "";
       }, c.tuck.opt.duration * 0.4);
       await run(discEl, c.tuck.kf, c.tuck.opt);
+      clearTimeout(infoBack);
     } finally {
       // 清場：取消 WAAPI，讓 CSS（hover／--dy）接回控制權
       clearTimeout(watchdog);
