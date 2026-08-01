@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Playlist — 桌面上一張會轉的 CD</title>
+<title>My Secret Playlist — 桌面上一張會轉的 CD</title>
 <meta name="description" content="串流時代缺少的儀式感－一個住在桌面角落的音樂 Widget">
-<meta property="og:title" content="My Playlist">
+<meta property="og:title" content="My Secret Playlist">
 <meta property="og:description" content="串流時代缺少的儀式感－一個住在桌面角落的音樂 Widget">
 <meta property="og:image" content="/og.png">
 <meta property="og:type" content="website">
@@ -31,15 +31,26 @@
     display:flex;flex-direction:column;align-items:center;
   }
 
-  /* ── Top nav：只放語言切換，跟著頁面捲動固定在頂端 ── */
+  /* ── Top nav：左 logo／中 標題（捲過 hero 才出現）／右 語言切換 ── */
   .topnav{
     position:sticky;top:0;z-index:20;align-self:stretch;
-    display:flex;justify-content:flex-end;align-items:center;
+    display:flex;justify-content:space-between;align-items:center;
     padding:12px 24px;
     background:rgba(241,241,240,.72);
     -webkit-backdrop-filter:saturate(180%) blur(12px);
     backdrop-filter:saturate(180%) blur(12px);
   }
+  .topnav .logo{display:flex;align-items:center;}
+  .topnav .logo img{display:block;height:26px;width:auto;}
+  /* 標題絕對置中，才不會被左右兩側寬度不同推歪 */
+  .topnav .nav-title{
+    position:absolute;left:50%;top:50%;
+    transform:translate(-50%,-50%) translateY(6px);
+    font-size:15px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;
+    opacity:0;pointer-events:none;
+    transition:opacity .22s ease,transform .22s ease;
+  }
+  .topnav.scrolled .nav-title{opacity:1;transform:translate(-50%,-50%) translateY(0);}
   .lang{display:inline-flex;gap:2px;padding:3px;border-radius:100px;background:#e3e3e2;}
   .lang button{
     appearance:none;border:0;background:transparent;cursor:pointer;font:inherit;
@@ -241,12 +252,19 @@
   @media (max-width:560px){
     header{padding-top:48px;}
     header h1{font-size:28px;}
+    /* 窄螢幕三塊擠在一起，把左右收窄讓中間標題還放得下 */
+    .topnav{padding:10px 14px;}
+    .topnav .logo img{height:22px;}
+    .topnav .nav-title{font-size:14px;}
+    .lang button{padding:5px 11px;font-size:12px;}
   }
 </style>
 </head>
 <body>
 
-  <nav class="topnav">
+  <nav class="topnav" id="topnav">
+    <div class="logo"><img src="logo.png" alt="Molly"></div>
+    <span class="nav-title" aria-hidden="true">My Secret Playlist</span>
     <div class="lang" role="group" aria-label="Language / 語言">
       <button type="button" data-lang="zh" aria-pressed="true">中文</button>
       <button type="button" data-lang="en" aria-pressed="false">EN</button>
@@ -254,7 +272,7 @@
   </nav>
 
   <header>
-    <h1>My Playlist</h1>
+    <h1 id="heroTitle">My Secret Playlist</h1>
     <p data-t="tagline">串流時代缺少的儀式感－一個住在桌面角落的音樂 Widget</p>
   </header>
 
@@ -361,7 +379,7 @@
     prev: "Previous track",
     toggle: "Play / pause",
     next: "Next track",
-    title: "My Playlist — a spinning CD on your desktop",
+    title: "My Secret Playlist — a spinning CD on your desktop",
     desc: "The ritual streaming forgot — a music widget that lives in the corner of your desktop.",
   };
 
@@ -395,6 +413,24 @@
   let saved = null;
   try { saved = localStorage.getItem("mp-lang"); } catch (e) {}
   setLang(saved || (/^zh/i.test(navigator.language || "") ? "zh" : "en"));
+})();
+
+// ── 大標捲到 nav 後面時，把標題接手到 nav 中間 ──
+// 交棒點＝大標的底部剛好被 nav 蓋住那一刻，所以量的是 bottom 對 nav 高度。
+// 用 scroll + rAF 節流，不用 IntersectionObserver：後者要靠渲染生命週期回呼，
+// 在被遮住／不可見的分頁裡不一定會送達。
+(() => {
+  const nav = document.getElementById("topnav"), hero = document.getElementById("heroTitle");
+  if (!nav || !hero) return;
+  let queued = false;
+  const sync = () => {
+    queued = false;
+    nav.classList.toggle("scrolled", hero.getBoundingClientRect().bottom <= nav.offsetHeight);
+  };
+  const onScroll = () => { if (!queued) { queued = true; requestAnimationFrame(sync); } };
+  addEventListener("scroll", onScroll, { passive: true });
+  addEventListener("resize", onScroll);
+  sync();
 })();
 </script>
 
