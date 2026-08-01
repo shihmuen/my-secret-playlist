@@ -31,7 +31,28 @@
     display:flex;flex-direction:column;align-items:center;
   }
 
-  header{padding:72px 24px 8px;text-align:center;}
+  /* ── Top nav：只放語言切換，跟著頁面捲動固定在頂端 ── */
+  .topnav{
+    position:sticky;top:0;z-index:20;align-self:stretch;
+    display:flex;justify-content:flex-end;align-items:center;
+    padding:12px 24px;
+    background:rgba(241,241,240,.72);
+    -webkit-backdrop-filter:saturate(180%) blur(12px);
+    backdrop-filter:saturate(180%) blur(12px);
+  }
+  .lang{display:inline-flex;gap:2px;padding:3px;border-radius:100px;background:#e3e3e2;}
+  .lang button{
+    appearance:none;border:0;background:transparent;cursor:pointer;font:inherit;
+    font-size:13px;font-weight:600;color:#8e8e93;letter-spacing:.01em;
+    padding:5px 14px;border-radius:100px;
+    transition:background .18s ease,color .18s ease;
+  }
+  .lang button:hover{color:#5b5b5f;}
+  .lang button[aria-pressed="true"]{
+    background:#fff;color:#1c1c1e;box-shadow:0 1px 2px rgba(0,0,0,.08);
+  }
+
+  header{padding:40px 24px 8px;text-align:center;}
   header h1{font-size:34px;font-weight:800;letter-spacing:-.02em;}
   header p{margin-top:10px;font-size:16px;color:#7c7c7f;}
 
@@ -225,9 +246,16 @@
 </head>
 <body>
 
+  <nav class="topnav">
+    <div class="lang" role="group" aria-label="Language / 語言">
+      <button type="button" data-lang="zh" aria-pressed="true">中文</button>
+      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </nav>
+
   <header>
     <h1>My Playlist</h1>
-    <p>串流時代缺少的儀式感－一個住在桌面角落的音樂 Widget</p>
+    <p data-t="tagline">串流時代缺少的儀式感－一個住在桌面角落的音樂 Widget</p>
   </header>
 
   <div class="stage" id="stage">
@@ -254,58 +282,121 @@
       </div>
     </div>
     <div class="controls">
-      <button id="prev" aria-label="上一首"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
-      <button id="toggle" class="play" aria-label="播放/暫停"><svg id="playIcon" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20"/></svg></button>
-      <button id="next" aria-label="下一首"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button id="prev" data-t-aria="prev" aria-label="上一首"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <button id="toggle" class="play" data-t-aria="toggle" aria-label="播放/暫停"><svg id="playIcon" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20"/></svg></button>
+      <button id="next" data-t-aria="next" aria-label="下一首"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
     </div>
-    <div class="hint">這張卡片可以玩：hover 展開封面・按箭頭換片</div>
+    <div class="hint" data-t="hint">這張卡片可以玩：hover 展開封面・按箭頭換片</div>
   </div>
 
-  <section class="about">
+  <section class="about" data-t="about">
     你在 <strong>Apple Music</strong> 或 <strong>Spotify</strong> 播什麼，<br>
     它就把封面變成一張會轉的 CD，安靜地陪你工作。
   </section>
 
   <section class="download">
-    <h2>下載 Mac 版</h2>
-    <p class="sub">免費、開了就自己動——誰在播就顯示誰。</p>
+    <h2 data-t="dlTitle">下載 Mac 版</h2>
+    <p class="sub" data-t="dlSub">免費、開了就自己動——誰在播就顯示誰。</p>
     <div class="dl-buttons">
       <a href="https://github.com/shihmuen/my-secret-playlist/releases/latest/download/My-Playlist-mac-apple-silicon.zip">
         <span class="big">Apple Silicon</span>
-        <span class="small">M1 / M2 / M3 / M4</span>
+        <span class="small" data-t="dlSilicon">M1 / M2 / M3 / M4</span>
       </a>
       <a href="https://github.com/shihmuen/my-secret-playlist/releases/latest/download/My-Playlist-mac-intel.zip">
         <span class="big">Intel Mac</span>
-        <span class="small">2020 以前的 Mac</span>
+        <span class="small" data-t="dlIntel">2020 以前的 Mac</span>
       </a>
       <a href="https://github.com/shihmuen/my-secret-playlist/releases/latest/download/My-Playlist-windows-x64.zip">
         <span class="big">Windows</span>
-        <span class="small">Windows 10 / 11</span>
+        <span class="small" data-t="dlWin">Windows 10 / 11</span>
       </a>
     </div>
-    <p class="req">免費・不用註冊任何帳號<br>Mac 版支援 Apple Music＋Spotify；Windows 版支援 Spotify、YouTube 等所有播放器</p>
+    <p class="req" data-t="dlReq">免費・不用註冊任何帳號<br>Mac 版支援 Apple Music＋Spotify；Windows 版支援 Spotify、YouTube 等所有播放器</p>
   </section>
 
   <section class="steps">
-    <h3>安裝三步驟</h3>
+    <h3 data-t="stepsTitle">安裝三步驟</h3>
     <ol>
-      <li><b class="n">1</b><span>解壓縮下載的檔案，把 <strong>My Playlist</strong> 拖進「應用程式」資料夾</span></li>
-      <li><b class="n">2</b><span>第一次打開 macOS 會攔下來說「無法驗證」（這是獨立開發者的小作品，沒有 Apple 的付費簽名）。解法：先在圖示上<strong>按右鍵 → 打開</strong>；如果還是被擋，到<strong>系統設定 → 隱私權與安全性</strong>，往下捲會看到 My Playlist，按<strong>「仍要打開」</strong>就好，之後不會再問</span></li>
-      <li><b class="n">3</b><span>跳出「想要控制 Music／Spotify」的視窗時按<strong>「好」</strong>——這是它讀取正在播放歌曲的唯一權限。接著播首歌，CD 就會插進卡片開始轉 🎧</span></li>
+      <li><b class="n">1</b><span data-t="mac1">解壓縮下載的檔案，把 <strong>My Playlist</strong> 拖進「應用程式」資料夾</span></li>
+      <li><b class="n">2</b><span data-t="mac2">第一次打開 macOS 會攔下來說「無法驗證」（這是獨立開發者的小作品，沒有 Apple 的付費簽名）。解法：先在圖示上<strong>按右鍵 → 打開</strong>；如果還是被擋，到<strong>系統設定 → 隱私權與安全性</strong>，往下捲會看到 My Playlist，按<strong>「仍要打開」</strong>就好，之後不會再問</span></li>
+      <li><b class="n">3</b><span data-t="mac3">跳出「想要控制 Music／Spotify」的視窗時按<strong>「好」</strong>——這是它讀取正在播放歌曲的唯一權限。接著播首歌，CD 就會插進卡片開始轉 🎧</span></li>
     </ol>
-    <h3 style="margin-top:40px">Windows 用戶</h3>
+    <h3 style="margin-top:40px" data-t="winTitle">Windows 用戶</h3>
     <ol>
-      <li><b class="n">1</b><span>解壓縮後打開資料夾，執行 <strong>My Playlist.exe</strong></span></li>
-      <li><b class="n">2</b><span>Windows 可能會跳出藍色的防護視窗——按<strong>「其他資訊」→「仍要執行」</strong>（一樣是因為獨立作品沒有付費簽名）。接著播任何音樂（Spotify、YouTube 都行），CD 就會開始轉</span></li>
+      <li><b class="n">1</b><span data-t="win1">解壓縮後打開資料夾，執行 <strong>My Playlist.exe</strong></span></li>
+      <li><b class="n">2</b><span data-t="win2">Windows 可能會跳出藍色的防護視窗——按<strong>「其他資訊」→「仍要執行」</strong>（一樣是因為獨立作品沒有付費簽名）。接著播任何音樂（Spotify、YouTube 都行），CD 就會開始轉</span></li>
     </ol>
   </section>
 
   <footer>
     A side project by Molly<br>
-    點 CD 播放／暫停・拖卡片移動・右下角弧線縮放大小・深淺色跟隨系統<br>
+    <span data-t="footHint">點 CD 播放／暫停・拖卡片移動・右下角弧線縮放大小・深淺色跟隨系統</span><br>
     <!-- 寫死的是保底值；載入後改抓 GitHub 最新 Release，發版後不用重新部署網頁 -->
     <span class="ver" id="ver">v0.1.3</span>
   </footer>
+
+<script>
+// ── 中英切換 ──
+// HTML 裡寫的是中文（預設語言＋沒 JS 時的保底畫面），英文放在下面的字典，
+// 靠 data-t 的 key 對應。含 <strong> 的句子用 innerHTML 換，所以字典存的是 HTML 片段。
+(() => {
+  const EN = {
+    tagline: "The ritual streaming forgot — a music widget that lives in the corner of your desktop.",
+    hint: "Have a play: hover to open the cover · arrows to change discs",
+    about: "Whatever you're playing on <strong>Apple Music</strong> or <strong>Spotify</strong>,<br>it turns the cover into a spinning CD and quietly keeps you company while you work.",
+    dlTitle: "Download",
+    dlSub: "Free, and it runs itself — whoever's playing is what you see.",
+    dlSilicon: "M1 / M2 / M3 / M4",
+    dlIntel: "Macs before 2020",
+    dlWin: "Windows 10 / 11",
+    dlReq: "Free · no account needed<br>Mac supports Apple Music and Spotify; Windows supports Spotify, YouTube and any other player",
+    stepsTitle: "Three steps to install",
+    mac1: "Unzip the file you downloaded and drag <strong>My Playlist</strong> into your Applications folder",
+    mac2: "The first time you open it, macOS will stop you with “cannot be verified” (it's a small independent project, without Apple's paid signature). The fix: <strong>right-click the icon → Open</strong>. If it's still blocked, go to <strong>System Settings → Privacy &amp; Security</strong>, scroll down to My Playlist and hit <strong>Open Anyway</strong>. It won't ask again.",
+    mac3: "When it asks to control <strong>Music / Spotify</strong>, click <strong>OK</strong> — that's the only permission it needs to read what's playing. Then start a song and the CD slides into the card and begins to spin 🎧",
+    winTitle: "On Windows",
+    win1: "Unzip, open the folder and run <strong>My Playlist.exe</strong>",
+    win2: "Windows may throw up a blue protection screen — click <strong>More info → Run anyway</strong> (same reason: an independent project without a paid signature). Then play anything you like — Spotify, YouTube — and the CD starts spinning",
+    footHint: "Click the CD to play or pause · drag the card to move it · the arc in the corner resizes · light and dark follow your system",
+    prev: "Previous track",
+    toggle: "Play / pause",
+    next: "Next track",
+    title: "My Playlist — a spinning CD on your desktop",
+    desc: "The ritual streaming forgot — a music widget that lives in the corner of your desktop.",
+  };
+
+  // 開頁先把中文原文收起來，之後切回中文不必再存一份 HTML
+  const ZH = { title: document.title, desc: document.querySelector('meta[name=description]').content };
+  document.querySelectorAll("[data-t]").forEach(el => { ZH[el.dataset.t] = el.innerHTML; });
+  document.querySelectorAll("[data-t-aria]").forEach(el => {
+    ZH[el.dataset.tAria] = el.getAttribute("aria-label");
+  });
+
+  const btns = [...document.querySelectorAll(".lang button")];
+
+  function setLang(lang){
+    const d = lang === "en" ? EN : ZH;
+    document.querySelectorAll("[data-t]").forEach(el => {
+      if (d[el.dataset.t] != null) el.innerHTML = d[el.dataset.t];
+    });
+    document.querySelectorAll("[data-t-aria]").forEach(el => {
+      if (d[el.dataset.tAria] != null) el.setAttribute("aria-label", d[el.dataset.tAria]);
+    });
+    document.title = d.title;
+    document.querySelector('meta[name=description]').content = d.desc;
+    document.documentElement.lang = lang === "en" ? "en" : "zh-Hant";
+    btns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
+    try { localStorage.setItem("mp-lang", lang); } catch (e) {}
+  }
+
+  btns.forEach(b => b.addEventListener("click", () => setLang(b.dataset.lang)));
+
+  // 記住上次選的；第一次來的人看瀏覽器語言決定（非中文一律給英文）
+  let saved = null;
+  try { saved = localStorage.getItem("mp-lang"); } catch (e) {}
+  setLang(saved || (/^zh/i.test(navigator.language || "") ? "zh" : "en"));
+})();
+</script>
 
 <script>
 (() => {
