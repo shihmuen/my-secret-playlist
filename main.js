@@ -193,7 +193,7 @@ function handleWinNow(j) {
     return;
   }
   let art = null;
-  if (j.art) {
+  if (typeof j.art === "string" && j.art) {
     if (artCache.has(j.id)) {
       art = artCache.get(j.id);
     } else if (fs.existsSync(j.art)) {

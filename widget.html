@@ -270,7 +270,7 @@
   const player = $("player");
   const FALLBACK = "linear-gradient(160deg,#c9c9c8 0%,#b4b4b3 100%)";
 
-  let curId = null, playing = false, pos = 0, dur = 0, switching = false;
+  let curId = null, curArt = null, playing = false, pos = 0, dur = 0, switching = false;
 
   // 視窗縮放 → 內容等比縮放（基準：寬 528px 時 --s = 1）
   function fit(){
@@ -359,6 +359,7 @@
   }
 
   function applyArt(d){
+    curArt = d.art || null;
     const art = d.art ? `url("${d.art}") center / cover no-repeat` : FALLBACK;
     $("discFace").style.background = art;
     $("cover").style.background = art;
@@ -516,6 +517,10 @@
       } else if (!switching){
         swapDisc(d);
       }
+    } else if (d.art && d.art !== curArt && !switching){
+      // Windows 的封面會晚幾拍才到（瀏覽器先送標題、縮圖後送）。
+      // 同一首歌後來補到圖就直接換上，不重播換片動畫。
+      applyArt(d);
     }
     setPlaying(d.state === "playing");
     render();

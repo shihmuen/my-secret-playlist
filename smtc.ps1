@@ -29,6 +29,7 @@ $manager = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessi
 $md5 = [System.Security.Cryptography.MD5]::Create()
 $lastKey = ""
 $lastArt = $null
+$artTries = 0
 
 while ($true) {
   try {
@@ -51,28 +52,59 @@ while ($true) {
         $key = "$($props.Artist)|$($props.Title)"
         $id = ([System.BitConverter]::ToString($md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($key))) -replace '-', '').Substring(0, 16)
 
-        # 縮圖：換歌時抽一次，存暫存檔
+        # 縮圖：換歌時歸零重抽
         if ($key -ne $lastKey) {
           $lastKey = $key
           $lastArt = $null
+          $artTries = 0
+        }
+
+        # ⚠️ 抽不到不能只試一次就放棄：瀏覽器（Edge／Chrome）播 YouTube 時，
+        #    SMTC 是先送標題／演出者，縮圖往往晚幾拍才掛上去。
+        #    所以只要還沒拿到圖就每輪重試，上限 20 次（≈20 秒）避免無縮圖的來源一直空轉。
+        if ($null -eq $lastArt -and $artTries -lt 20) {
+          $artTries++
           if ($null -ne $props.Thumbnail) {
             try {
               $artPath = Join-Path ([System.IO.Path]::GetTempPath()) "my-playlist-art-$id.jpg"
-              if (-not (Test-Path $artPath)) {
+              # 舊的暫存檔可能是上次寫到一半的 0 byte，長度要一起檢查
+              if ((Test-Path $artPath) -and ((Get-Item $artPath).Length -gt 0)) {
+                $lastArt = $artPath
+              } else {
                 $stream = Await ($props.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
-                $size = $stream.Size
-                $reader = New-Object Windows.Storage.Streams.DataReader($stream)
-                Await ($reader.LoadAsync($size)) ([UInt32]) | Out-Null
-                $bytes = New-Object byte[] $size
-                $reader.ReadBytes($bytes)
-                [System.IO.File]::WriteAllBytes($artPath, $bytes)
-                $reader.Dispose(); $stream.Dispose()
+                $size = [uint32]$stream.Size
+                $bytes = $null
+                if ($size -gt 0) {
+                  try {
+                    # 主路徑：橋接成 .NET Stream 再讀。
+                    # 用 New-Object 建 WinRT 的 DataReader 在部分機器上會啟用失敗，所以擺備援。
+                    $netStream = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stream)
+                    $ms = New-Object System.IO.MemoryStream
+                    $netStream.CopyTo($ms)
+                    $bytes = $ms.ToArray()
+                    $ms.Dispose(); $netStream.Dispose()
+                  } catch {
+                    [Console]::Error.WriteLine("thumbnail stream fallback: $_")
+                    $reader = New-Object Windows.Storage.Streams.DataReader($stream)
+                    Await ($reader.LoadAsync($size)) ([UInt32]) | Out-Null
+                    $bytes = New-Object byte[] $size
+                    $reader.ReadBytes($bytes)
+                    $reader.Dispose()
+                  }
+                }
+                try { $stream.Dispose() } catch {}
+                if ($null -ne $bytes -and $bytes.Length -gt 0) {
+                  [System.IO.File]::WriteAllBytes($artPath, $bytes)
+                  $lastArt = $artPath
+                } else {
+                  [Console]::Error.WriteLine("thumbnail empty (try $artTries, size $size)")
+                }
               }
-              $lastArt = $artPath
             } catch {
-              [Console]::Error.WriteLine("thumbnail error: $_")
-              $lastArt = $null
+              [Console]::Error.WriteLine("thumbnail error (try $artTries): $_")
             }
+          } elseif ($artTries -eq 20) {
+            [Console]::Error.WriteLine("no thumbnail from source after 20 tries: $key")
           }
         }
 
