@@ -104,6 +104,38 @@ function download(url, dest) {
 const hasSpotify = () => fs.existsSync("/Applications/Spotify.app");
 let lastSrc = null;
 
+// 檔案存在還不夠：抽封面失敗時會留下 0 byte 的空檔，沿用它畫面就是空的
+function hasBytes(p) {
+  try { return fs.statSync(p).size > 0; } catch (e) { return false; }
+}
+
+// ── 封面備援：iTunes Search API ──
+// Apple Music 串流曲目（class 為 "URL track"、沒加進資料庫的）AppleScript 讀到的
+// artworks 是空的——Music App 畫面上那張是它自己連網抓的，不在本機物件裡。
+// 拿歌手＋歌名去 Apple 官方的 Search API 查同一張圖（免金鑰）。
+const noArtOnline = new Set();   // 查無結果的別一直重打
+
+function itunesArt(artist, name) {
+  return new Promise((resolve) => {
+    const term = `${artist || ""} ${name || ""}`.trim();
+    if (!term) return resolve(null);
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=1`;
+    const req = require("https").get(url, { headers: { "User-Agent": "my-playlist" } }, (res) => {
+      let s = "";
+      res.on("data", (d) => (s += d));
+      res.on("end", () => {
+        try {
+          const r = JSON.parse(s).results[0];
+          // artworkUrl100 換成 600x600 才夠碟片放大用
+          resolve(r && r.artworkUrl100 ? r.artworkUrl100.replace(/\/\d+x\d+bb\./, "/600x600bb.") : null);
+        } catch (e) { resolve(null); }
+      });
+    });
+    req.on("error", () => resolve(null));
+    req.setTimeout(6000, () => { req.destroy(); resolve(null); });
+  });
+}
+
 async function poll() {
   if (!win) return;
   const m = parseNow(await osa(MUSIC_SCRIPT), "music");
@@ -128,9 +160,15 @@ async function poll() {
   const artFile = path.join(os.tmpdir(), `my-playlist-art-${key}.png`);
 
   if (cur.id !== lastId) {
-    if (!fs.existsSync(artFile)) {
+    if (!hasBytes(artFile)) {
       if (cur.src === "music") await osa(artScript(artFile));
       else if (cur.artUrl) await download(cur.artUrl, artFile);
+    }
+    // 本機真的沒有（串流曲目）→ 上網補一張
+    if (!hasBytes(artFile) && !noArtOnline.has(key)) {
+      const u = await itunesArt(cur.artist, cur.name);
+      if (u) await download(u, artFile);
+      if (!hasBytes(artFile)) noArtOnline.add(key);
     }
     lastId = cur.id;
   }
@@ -138,8 +176,12 @@ async function poll() {
   let art = null;
   if (artCache.has(key)) {
     art = artCache.get(key);
-  } else if (fs.existsSync(artFile)) {
-    art = "data:image/png;base64," + fs.readFileSync(artFile).toString("base64");
+  } else if (hasBytes(artFile)) {
+    // 這個檔可能是 AppleScript 抽出來的原始資料、也可能是網路下載的 JPEG，
+    // 副檔名不代表內容 → 看檔頭決定 MIME，別讓 canvas 取色因為型別不符失敗
+    const buf = fs.readFileSync(artFile);
+    const mime = buf[0] === 0xff && buf[1] === 0xd8 ? "image/jpeg" : "image/png";
+    art = `data:${mime};base64,` + buf.toString("base64");
     artCache.set(key, art);
     if (artCache.size > 20) artCache.delete(artCache.keys().next().value);
   }
