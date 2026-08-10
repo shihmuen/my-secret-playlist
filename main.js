@@ -109,16 +109,33 @@ function hasBytes(p) {
   try { return fs.statSync(p).size > 0; } catch (e) { return false; }
 }
 
-// ── 封面備援：iTunes Search API ──
-// Apple Music 串流曲目（class 為 "URL track"、沒加進資料庫的）AppleScript 讀到的
-// artworks 是空的——Music App 畫面上那張是它自己連網抓的，不在本機物件裡。
-// 拿歌手＋歌名去 Apple 官方的 Search API 查同一張圖（免金鑰）。
-const noArtOnline = new Set();   // 查無結果的別一直重打
+// 檔名的副檔名不代表內容（AppleScript 抽的原始資料、網路抓的 JPEG 都可能）→ 看檔頭決定 MIME
+function toDataUrl(p) {
+  const buf = fs.readFileSync(p);
+  const mime = buf[0] === 0xff && buf[1] === 0xd8 ? "image/jpeg" : "image/png";
+  return `data:${mime};base64,` + buf.toString("base64");
+}
 
-function itunesArt(artist, name) {
+// ── 封面備援：iTunes Search API（免金鑰）──
+// 兩種情況本機都拿不到圖，得上網補：
+//   Mac：Apple Music 串流曲目（class "URL track"）AppleScript 讀到的 artworks 是空的
+//   Windows：瀏覽器播 YouTube 時，SMTC 常常根本不附縮圖
+const noArtOnline = new Set();      // 查無結果的別一直重打
+const artPending = new Set();       // 查詢中的別重複發
+
+// 括號註記（[Full Album]、(Official MV)…）會讓搜尋直接落空，先清掉
+const trimJunk = (s) => s.replace(/\s+/g, " ").replace(/^[\s\-–—·|]+|[\s\-–—·|]+$/g, "");
+const cleanTerm = (s) => trimJunk((s || "").replace(/[\[\(（【][^\]\)）】]*[\]\)）】]/g, " "));
+
+// 中英雙語標題（亞洲的歌／YouTube 很常見）：iTunes 通常只索引其中一種語言，
+// 兩種混在一起搜就會 0 筆。拿掉 CJK 再試一次，但要確定剩下的拉丁字夠多才有意義。
+const dropCJK = (s) => {
+  const t = trimJunk(s.replace(/[　-鿿가-힯＀-￯]/g, " "));
+  return t.replace(/[^A-Za-z0-9]/g, "").length >= 4 ? t : "";
+};
+
+function searchItunes(term) {
   return new Promise((resolve) => {
-    const term = `${artist || ""} ${name || ""}`.trim();
-    if (!term) return resolve(null);
     const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=1`;
     const req = require("https").get(url, { headers: { "User-Agent": "my-playlist" } }, (res) => {
       let s = "";
@@ -134,6 +151,45 @@ function itunesArt(artist, name) {
     req.on("error", () => resolve(null));
     req.setTimeout(6000, () => { req.destroy(); resolve(null); });
   });
+}
+
+// 依序試幾種寫法，第一個查到的就用。YouTube 的「演出者」是頻道名（會汙染搜尋），
+// 所以「只用標題」那一版往往才是命中的那個。
+async function itunesArt(artist, name) {
+  const both = cleanTerm(`${artist || ""} ${name || ""}`);
+  const only = cleanTerm(name);
+  const tried = new Set();
+  for (const t of [both, only, dropCJK(only), dropCJK(both)]) {
+    if (!t || tried.has(t)) continue;
+    tried.add(t);
+    const u = await searchItunes(t);
+    if (u) return u;
+  }
+  return null;
+}
+
+// 本機沒有封面時上網補一張，結果直接放進 artCache（下一拍就會送給畫面）。
+// 同一首歌只查一次：查詢中的擋掉、查無結果的記起來，不然每秒都會打一次 API。
+async function fetchOnlineArt(cacheKey, artist, name) {
+  if (artCache.has(cacheKey) || noArtOnline.has(cacheKey) || artPending.has(cacheKey)) return;
+  artPending.add(cacheKey);
+  try {
+    const file = path.join(os.tmpdir(), `my-playlist-art-online-${cacheKey}.jpg`);
+    if (!hasBytes(file)) {
+      const u = await itunesArt(artist, name);
+      if (u) await download(u, file);
+    }
+    if (hasBytes(file)) {
+      artCache.set(cacheKey, toDataUrl(file));
+      if (artCache.size > 20) artCache.delete(artCache.keys().next().value);
+    } else {
+      noArtOnline.add(cacheKey);
+    }
+  } catch (e) {
+    noArtOnline.add(cacheKey);
+  } finally {
+    artPending.delete(cacheKey);
+  }
 }
 
 async function poll() {
@@ -165,11 +221,7 @@ async function poll() {
       else if (cur.artUrl) await download(cur.artUrl, artFile);
     }
     // 本機真的沒有（串流曲目）→ 上網補一張
-    if (!hasBytes(artFile) && !noArtOnline.has(key)) {
-      const u = await itunesArt(cur.artist, cur.name);
-      if (u) await download(u, artFile);
-      if (!hasBytes(artFile)) noArtOnline.add(key);
-    }
+    if (!hasBytes(artFile)) await fetchOnlineArt(key, cur.artist, cur.name);
     lastId = cur.id;
   }
 
@@ -177,11 +229,7 @@ async function poll() {
   if (artCache.has(key)) {
     art = artCache.get(key);
   } else if (hasBytes(artFile)) {
-    // 這個檔可能是 AppleScript 抽出來的原始資料、也可能是網路下載的 JPEG，
-    // 副檔名不代表內容 → 看檔頭決定 MIME，別讓 canvas 取色因為型別不符失敗
-    const buf = fs.readFileSync(artFile);
-    const mime = buf[0] === 0xff && buf[1] === 0xd8 ? "image/jpeg" : "image/png";
-    art = `data:${mime};base64,` + buf.toString("base64");
+    art = toDataUrl(artFile);
     artCache.set(key, art);
     if (artCache.size > 20) artCache.delete(artCache.keys().next().value);
   }
@@ -235,14 +283,17 @@ function handleWinNow(j) {
     return;
   }
   let art = null;
-  if (typeof j.art === "string" && j.art) {
-    if (artCache.has(j.id)) {
-      art = artCache.get(j.id);
-    } else if (fs.existsSync(j.art)) {
-      art = "data:image/jpeg;base64," + fs.readFileSync(j.art).toString("base64");
-      artCache.set(j.id, art);
-      if (artCache.size > 20) artCache.delete(artCache.keys().next().value);
-    }
+  if (artCache.has(j.id)) {
+    art = artCache.get(j.id);
+  } else if (typeof j.art === "string" && hasBytes(j.art)) {
+    art = toDataUrl(j.art);
+    artCache.set(j.id, art);
+    if (artCache.size > 20) artCache.delete(artCache.keys().next().value);
+  } else {
+    // SMTC 沒附縮圖（瀏覽器播 YouTube 時很常見）→ 背景上網補一張。
+    // 不擋這一拍的送出：查到之後進 artCache，下一秒的輪詢就會帶上，
+    // 畫面端已經支援「同一首歌後來補到圖直接換上」。
+    fetchOnlineArt(j.id, j.artist, j.title);
   }
   win.webContents.send("now-playing", {
     state: j.state,
