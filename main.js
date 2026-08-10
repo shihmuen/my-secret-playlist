@@ -144,7 +144,13 @@ function searchItunes(term) {
         try {
           const r = JSON.parse(s).results[0];
           // artworkUrl100 換成 600x600 才夠碟片放大用
-          resolve(r && r.artworkUrl100 ? r.artworkUrl100.replace(/\/\d+x\d+bb\./, "/600x600bb.") : null);
+          resolve(r && r.artworkUrl100
+            ? {
+                url: r.artworkUrl100.replace(/\/\d+x\d+bb\./, "/600x600bb."),
+                track: r.trackName || "",
+                artist: r.artistName || "",
+              }
+            : null);
         } catch (e) { resolve(null); }
       });
     });
@@ -153,7 +159,18 @@ function searchItunes(term) {
   });
 }
 
-// 依序試幾種寫法，第一個查到的就用。YouTube 的「演出者」是頻道名（會汙染搜尋），
+// iTunes 一定會回「最接近」的東西，播 vlog／podcast 時就會撈到毫不相干的專輯。
+// 把兩邊都壓成純字元後互相包含才算數——寧可沒有封面，也不要掛錯一張。
+// ⚠️ 不能只比歌名：iTunes 常收羅馬拼音（「死ぬのがいいわ」在它那裡叫 Shinunoga E-Wa），
+//    只比歌名會把正確的結果誤殺。歌手名跨語言穩定得多，兩者其一對得上就算數。
+const squash = (s) => (s || "").toLowerCase().replace(/[^a-z0-9　-鿿가-힯]/g, "");
+const contains = (a, b, min) => b.length >= min && (a.includes(b) || b.includes(a));
+function looksRight(term, r) {
+  const a = squash(term);
+  return contains(a, squash(r.track), 2) || contains(a, squash(r.artist), 3);
+}
+
+// 依序試幾種寫法，第一個查到又對得上的就用。YouTube 的「演出者」是頻道名（會汙染搜尋），
 // 所以「只用標題」那一版往往才是命中的那個。
 async function itunesArt(artist, name) {
   const both = cleanTerm(`${artist || ""} ${name || ""}`);
@@ -162,8 +179,8 @@ async function itunesArt(artist, name) {
   for (const t of [both, only, dropCJK(only), dropCJK(both)]) {
     if (!t || tried.has(t)) continue;
     tried.add(t);
-    const u = await searchItunes(t);
-    if (u) return u;
+    const r = await searchItunes(t);
+    if (r && looksRight(t, r)) return r.url;
   }
   return null;
 }
