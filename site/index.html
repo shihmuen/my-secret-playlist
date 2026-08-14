@@ -680,6 +680,9 @@
     audio.crossOrigin = "anonymous";
     let sound = false;          // 是否已解鎖出聲
     let audioTimer = null;
+    // 除錯用：父頁／測試腳本可讀 window.__mollyEmbed 看解鎖與音源狀態
+    const dbg = window.__mollyEmbed = { sound: false, unlockTries: 0, lastErr: null,
+      get preview(){ return tracks[idx] && tracks[idx].preview || null; } };
 
     function playPreview(){
       const t = tracks[idx];
@@ -688,10 +691,13 @@
       audio.play().catch(() => {});
     }
     // 出聲後：進度跟著真實音訊（試聽長度約 30s），結束自動下一首
-    audio.addEventListener("loadedmetadata", () => {
+    function setDur(){
       if (!sound) return;
-      $("dur").textContent = fmt(audio.duration || 30);
-    });
+      const d = audio.duration;
+      if (d && isFinite(d)) $("dur").textContent = fmt(d);
+      else audio.addEventListener("loadedmetadata", setDur, { once: true });
+    }
+    audio.addEventListener("loadedmetadata", setDur);
     audio.addEventListener("timeupdate", () => {
       if (!sound) return;
       cur = audio.currentTime;
@@ -702,16 +708,21 @@
 
     function unlock(){
       if (sound) return;
+      dbg.unlockTries++;
       const t = tracks[idx];
-      if (!t.preview) return;              // iTunes 還沒回來，下次手勢再試
+      if (!t.preview) { dbg.lastErr = "no-preview"; return; }   // iTunes 還沒回來，下次手勢再試
       audio.src = t.preview;
       audio.play().then(() => {
         sound = true;
+        dbg.sound = true;
         clearInterval(timer);              // 關掉假進度，改跟音訊
         setPlaying(true);
         clearInterval(timer);              // setPlaying 又開了假 tick，再關一次
         player.classList.remove("paused");
-      }).catch(() => {});                  // 無手勢被拒＝維持無聲視覺
+        // loadedmetadata 常在 play() resolve 之前就觸發，那時 sound 還是 false、
+        // handler 直接 return，時長會停在假資料 → 這裡主動補寫一次
+        setDur();
+      }).catch((e) => { dbg.lastErr = String(e && e.name || e); });   // 無手勢被拒＝維持無聲視覺
     }
     window.addEventListener("message", (e) => {
       if (e.data && e.data.type === "molly-play") unlock();
@@ -723,7 +734,7 @@
     // 換片動畫每次結束都會走 resetSwap → 在這裡接著播新歌
     resetSwap = function(){
       origReset();
-      if (sound) { clearInterval(timer); playPreview(); }
+      if (sound) { clearInterval(timer); playPreview(); setDur(); }
     };
     // 播放/暫停鍵在出聲模式控制真音訊
     $("toggle").addEventListener("click", () => {
