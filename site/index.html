@@ -258,6 +258,15 @@
     .topnav .nav-title{font-size:14px;}
     .lang button{padding:5px 11px;font-size:12px;}
   }
+
+  /* ── embed 模式（?embed=1，作品集 Hero 內嵌用）──
+     只留 stage（CD 卡片＋控制鍵），其他區塊全部隱藏；
+     stage 依 iframe 視窗等比縮放置中（由 JS fitEmbed 計算）。 */
+  body.embed{min-height:100vh;justify-content:center;overflow:hidden;background:transparent;}
+  body.embed .topnav, body.embed header, body.embed .about,
+  body.embed .download, body.embed .steps, body.embed footer,
+  body.embed .hint{display:none;}
+  body.embed .stage{margin:0;transform-origin:center center;}
 </style>
 </head>
 <body>
@@ -460,6 +469,7 @@
         if (!hit) return;
         t.dur = Math.round(hit.trackTimeMillis / 1000);
         t.img = hit.artworkUrl100.replace("100x100", "600x600");
+        t.preview = hit.previewUrl || null;   // 30 秒官方試聽（embed 模式的音源）
         await new Promise(ok => { const im = new Image(); im.onload = im.onerror = ok; im.src = t.img; });
       }catch(e){}
     }));
@@ -641,6 +651,94 @@
     player.classList.remove("eject");
     setTimeout(() => setPlaying(true), 700);
   }, 80);
+
+  // ── embed 模式：作品集 Hero 內嵌（?embed=1）──
+  // 載入即轉（視覺照舊、無聲），第一次手勢（iframe 內點擊，或父頁點擊後
+  // postMessage 過來）→ 播 iTunes 30 秒官方試聽、自動連播整份歌單循環。
+  // 出聲後進度條改跟真實音訊走；瀏覽器拒絕（無手勢）就維持無聲視覺，不報錯。
+  const EMBED = new URLSearchParams(location.search).has("embed");
+  if (EMBED) {
+    document.body.classList.add("embed");
+
+    function fitEmbed(){
+      const st = $("stage");
+      // scale() 不會改版面盒，交給 fixed 置中才不會溢出 iframe
+      st.style.position = "fixed";
+      st.style.left = "50%";
+      st.style.top = "50%";
+      st.style.transform = "translate(-50%,-50%)";
+      const r = st.getBoundingClientRect();
+      const sc = Math.min(window.innerWidth / r.width, window.innerHeight / r.height) * .96;
+      st.style.transform = `translate(-50%,-50%) scale(${sc})`;
+      st.style.marginBottom = "0";
+    }
+    window.removeEventListener("resize", fitStage);
+    window.addEventListener("resize", fitEmbed);
+    setTimeout(fitEmbed, 50);
+
+    const audio = new Audio();
+    audio.crossOrigin = "anonymous";
+    let sound = false;          // 是否已解鎖出聲
+    let audioTimer = null;
+
+    function playPreview(){
+      const t = tracks[idx];
+      if (!t.preview) { change(1); return; }
+      audio.src = t.preview;
+      audio.play().catch(() => {});
+    }
+    // 出聲後：進度跟著真實音訊（試聽長度約 30s），結束自動下一首
+    audio.addEventListener("loadedmetadata", () => {
+      if (!sound) return;
+      $("dur").textContent = fmt(audio.duration || 30);
+    });
+    audio.addEventListener("timeupdate", () => {
+      if (!sound) return;
+      cur = audio.currentTime;
+      $("cur").textContent = fmt(cur);
+      $("barFill").style.width = (cur / (audio.duration || 30) * 100) + "%";
+    });
+    audio.addEventListener("ended", () => { if (sound) change(1); });
+
+    function unlock(){
+      if (sound) return;
+      const t = tracks[idx];
+      if (!t.preview) return;              // iTunes 還沒回來，下次手勢再試
+      audio.src = t.preview;
+      audio.play().then(() => {
+        sound = true;
+        clearInterval(timer);              // 關掉假進度，改跟音訊
+        setPlaying(true);
+        clearInterval(timer);              // setPlaying 又開了假 tick，再關一次
+        player.classList.remove("paused");
+      }).catch(() => {});                  // 無手勢被拒＝維持無聲視覺
+    }
+    window.addEventListener("message", (e) => {
+      if (e.data && e.data.type === "molly-play") unlock();
+    });
+    document.addEventListener("pointerdown", unlock, { once: false });
+
+    // 出聲模式下接手「換片後開始播」：change() 完成後 idx 已更新
+    const origReset = resetSwap;
+    // 換片動畫每次結束都會走 resetSwap → 在這裡接著播新歌
+    resetSwap = function(){
+      origReset();
+      if (sound) { clearInterval(timer); playPreview(); }
+    };
+    // 播放/暫停鍵在出聲模式控制真音訊
+    $("toggle").addEventListener("click", () => {
+      if (!sound) return;                  // 未解鎖時維持原本的視覺切換
+      clearInterval(timer);
+      if (audio.paused) { audio.play().catch(()=>{}); player.classList.remove("paused"); }
+      else { audio.pause(); player.classList.add("paused"); }
+    });
+    $("disc").addEventListener("click", () => {
+      if (!sound) return;
+      clearInterval(timer);
+      if (audio.paused) { audio.play().catch(()=>{}); player.classList.remove("paused"); }
+      else { audio.pause(); player.classList.add("paused"); }
+    });
+  }
 })();
 </script>
 </body>
